@@ -24,8 +24,9 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('💠 KAL File System')
-    .addItem('🎯 Audit & Sync Selected File', 'updateSelectedInfo')
-    .addItem('🔄 Audit & Sync All Files',     'updateAllInfo')
+    .addItem('🎯 Audit & Sync Selected File',    'updateSelectedInfo')
+    .addItem('🔄 Audit & Sync All Files',         'updateAllInfo')
+    .addItem('🔍 Search For Missing KAL Files',   'searchMissingKALFiles')
     .addSeparator()
     .addItem('🏗️ Create Selected File',   'createSelectedFile')
     .addItem('🗑️ Remove Selected Version', 'removeSelectedFile')
@@ -205,7 +206,196 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   return color;
 }
 
-// ── 3. SYNC LOGIC ─────────────────────────────────────────────────────────────
+// ── 3. MISSING FILE SEARCH ───────────────────────────────────────────────────
+
+/**
+ * Scans Google Drive for KAL files whose base names are not yet in the
+ * registry, then inserts them directly below their matching drive-code
+ * section in the sheet.
+ *
+ * Algorithm:
+ *  1. Read drive codes (in sheet order) from the Levels tab.
+ *  2. Batch-read col C once to build: (a) the set of registered base names,
+ *     (b) the last row of each drive-code section.
+ *  3. For each drive code, search Drive for files whose title starts with
+ *     CODE- and matches the KAL naming pattern. Deduplicate by base name.
+ *  4. Insert missing rows bottom-up (highest section row first) so earlier
+ *     row indices stay valid throughout the insertion loop.
+ *  5. After all insertions, run processAuditForRow on every new row so the
+ *     full audit data (type, version, folder link, status …) is populated.
+ */
+function searchMissingKALFiles() {
+  const ui    = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+  // ── 1. Drive codes (ordered as they appear in Levels) ────────────────────
+  let driveCodes;
+  try {
+    driveCodes = getDriveCodesOrdered();
+  } catch (e) {
+    ui.alert('⚠️ ' + e.message);
+    return;
+  }
+  if (!driveCodes.length) {
+    ui.alert('⚠️ No drive codes found in the Levels sheet.');
+    return;
+  }
+
+  // ── 2. Single batch-read of col C ────────────────────────────────────────
+  const lastRow       = sheet.getLastRow();
+  const existingNames = new Set();          // registered base names (UPPER)
+  const sectionEndRow = {};                 // CODE → last row of that section
+  driveCodes.forEach(c => { sectionEndRow[c] = 0; });
+
+  if (lastRow >= DATA_START) {
+    sheet.getRange(DATA_START, COL.FILENAME, lastRow - DATA_START + 1, 1)
+      .getValues()
+      .forEach((cell, i) => {
+        const name = cell[0].toString().trim();
+        if (!name) return;
+        existingNames.add(name.toUpperCase());
+        const rowIdx = DATA_START + i;
+        for (const code of driveCodes) {
+          if (name.toUpperCase().startsWith(code + '-')) {
+            if (rowIdx > sectionEndRow[code]) sectionEndRow[code] = rowIdx;
+            break;
+          }
+        }
+      });
+  }
+
+  // ── 3. Search Drive per code ──────────────────────────────────────────────
+  const missing = {};
+  driveCodes.forEach(c => { missing[c] = []; });
+  let searchErrors = 0;
+
+  for (const code of driveCodes) {
+    const prefix    = code + '-';
+    const seenBases = new Set();
+    try {
+      const iter = DriveApp.searchFiles("title contains '" + prefix + "'");
+      while (iter.hasNext()) {
+        const fileName = iter.next().getName();
+
+        // Drive's "contains" is too broad — must actually start with the prefix
+        if (!fileName.toUpperCase().startsWith(prefix)) continue;
+
+        // Must follow KAL pattern: CODE-ENTITY_DOCTYPE_Description[…]
+        if (!isKALFileName(fileName)) continue;
+
+        const base = extractKALBaseName(fileName);
+        if (!base) continue;
+
+        const key = base.toUpperCase();
+        if (existingNames.has(key) || seenBases.has(key)) continue;
+
+        seenBases.add(key);
+        missing[code].push(base);
+      }
+    } catch (e) {
+      console.error('searchMissingKALFiles [' + code + ']: ' + e.message);
+      searchErrors++;
+    }
+    missing[code].sort(); // alphabetical within each section
+  }
+
+  const totalMissing = driveCodes.reduce((s, c) => s + missing[c].length, 0);
+  if (totalMissing === 0) {
+    let msg = '✅ No missing files found — the registry is up to date!';
+    if (searchErrors > 0) msg += '\n\n⚠️ ' + searchErrors + ' code(s) had search errors (View → Logs).';
+    ui.alert(msg);
+    return;
+  }
+
+  // ── 4. Insert missing rows bottom-up (highest section row first) ─────────
+  // Sorting descending by section-end row keeps pre-computed indices valid
+  // because insertions above a section don't shift rows below it.
+  const baseLastRow = sheet.getLastRow();
+  const insertOrder = driveCodes
+    .filter(c => missing[c].length > 0)
+    .sort((a, b) => (sectionEndRow[b] || baseLastRow) - (sectionEndRow[a] || baseLastRow));
+
+  const newRowStart = {}; // CODE → first newly inserted row index (for audit)
+
+  for (const code of insertOrder) {
+    const names    = missing[code];
+    const afterRow = sectionEndRow[code] || sheet.getLastRow();
+
+    sheet.insertRowsAfter(afterRow, names.length);
+    sheet.getRange(afterRow + 1, COL.FILENAME, names.length, 1)
+         .setValues(names.map(n => [n]));
+
+    newRowStart[code] = afterRow + 1;
+  }
+
+  // ── 5. Audit every newly inserted row ────────────────────────────────────
+  let levelsData, templateList;
+  try {
+    levelsData   = getLevelsData();
+    templateList = getTemplateList();
+  } catch (e) {
+    console.error('searchMissingKALFiles audit setup: ' + e.message);
+  }
+
+  if (levelsData) {
+    for (const code of insertOrder) {
+      const count = missing[code].length;
+      for (let i = 0; i < count; i++) {
+        const r = newRowStart[code] + i;
+        try {
+          processAuditForRow(
+            sheet, r,
+            levelsData.driveUrlLookup, levelsData.validEntities, levelsData.validDocs,
+            templateList
+          );
+          sheet.getRange(r, COL.ROW_NUM).setValue(r - 1);
+        } catch (e) {
+          console.error('searchMissingKALFiles audit row ' + r + ': ' + e.message);
+        }
+      }
+    }
+  }
+
+  // ── 6. Summary alert ─────────────────────────────────────────────────────
+  let summary = '✅ Added ' + totalMissing + ' missing file(s):\n\n';
+  driveCodes.forEach(c => {
+    if (missing[c].length) summary += '  • ' + c + '-  (' + missing[c].length + ' file(s))\n';
+  });
+  if (searchErrors > 0) summary += '\n⚠️ ' + searchErrors + ' code(s) had search errors (View → Logs).';
+  ui.alert(summary);
+}
+
+/** Returns true when the filename follows the KAL pattern CODE-ENTITY_DOCTYPE_Desc… */
+function isKALFileName(name) {
+  return /^[A-Za-z]{2,4}-[A-Za-z]+_[A-Za-z]+_[A-Za-z0-9]/i.test(name);
+}
+
+/** Strips _YYYYMMDD_v{n|FINAL} (and trailing whitespace) to return the base name. */
+function extractKALBaseName(name) {
+  const m = name.match(/^(.+?)(?:_\d{8}_v(?:\d+|FINAL))?\s*$/i);
+  return m ? m[1].trim() : name.trim();
+}
+
+/**
+ * Returns unique drive codes from column A of the Levels sheet (skipping
+ * the header row), preserving the order they appear in the sheet.
+ */
+function getDriveCodesOrdered() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Levels');
+  if (!sheet) throw new Error('Sheet "Levels" not found.');
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+
+  const codes = [];
+  const seen  = new Set();
+  sheet.getRange(2, 1, lastRow - 1, 1).getValues().forEach(row => {
+    const code = String(row[0]).toUpperCase().trim();
+    if (code && !seen.has(code)) { seen.add(code); codes.push(code); }
+  });
+  return codes;
+}
+
+// ── 4. SYNC LOGIC ─────────────────────────────────────────────────────────────
 
 /**
  * Reads the Levels sheet once and returns lookup structures.
