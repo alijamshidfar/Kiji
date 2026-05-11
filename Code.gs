@@ -71,7 +71,8 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   if (!baseName) {
     sheet.getRange(r, 1, 1, 2).clearContent();
     sheet.getRange(r, 4, 1, 8).clearContent();    // cols D–K (File Type … Preferred KAL Template)
-    sheet.getRange(r, 2, 1, 10).setBackground(null); // cols B–K
+    sheet.getRange(r, 12).clearContent();          // col L: Abstract
+    sheet.getRange(r, 2, 1, 11).setBackground(null); // cols B–L
     dropdownCell.clearContent().clearDataValidations();
     return;
   }
@@ -137,6 +138,11 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
       dropdownCell.setDataValidation(rule);
     }
   }
+
+  // Col L (12): Abstract — auto-generated AI summary
+  sheet.getRange(r, 12).setFormula(
+    '=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'
+  );
 
   let color = status !== "OK" ? "#f4cccc" : (info.version === "FINAL" ? "#d9ead3" : null);
   sheet.getRange(r, 2, 1, 11).setBackground(color); // cols B–L (includes Abstract at col 12)
