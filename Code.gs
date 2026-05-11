@@ -48,9 +48,73 @@ function onOpen() {
     .addItem('🗑️ Remove Selected Version', 'removeSelectedFile')
     .addItem('☢️ Remove All Versions',     'removeAllVersions')
     .addSeparator()
+    .addItem('🔧 Rebuild Header Row',  'buildHeaderRow')
     .addItem('📖 Show The User Guide', 'showUserGuide')
     .addToUi();
   try { updateTemplateDropdown(); } catch (_) { /* non-fatal on open */ }
+}
+
+// ── Header builder ────────────────────────────────────────────────────────────
+
+/**
+ * Writes the hardcoded header row (row 1) with formatting and the KAL logo.
+ * Safe to re-run: it always overwrites row 1.
+ */
+function buildHeaderRow() {
+  const ui    = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+
+  // ── Row geometry ──────────────────────────────────────────────────────────
+  sheet.setRowHeight(1, 64);
+
+  // ── Header labels (col A left blank — logo is inserted separately) ────────
+  const labels = [[
+    '',                           // A  → logo
+    'Human-Readable\nDescription',                                                                 // B
+    'File Name (Full Naming Guide)\n\n[DRIVE]-[ENTITY]_[DOCTYPE]_[Human-Readable CamelCase Description]', // C
+    'File Type',                  // D
+    'Current\nVersion',           // E
+    'Current\nFolder',            // F
+    'Link',                       // G
+    'For\nWho',                   // H
+    'KAL\nName Conversion\nCheck',// I
+    'Destination\nDrive',         // J
+    'Preferred\nKAL Template',    // K
+    'Abstract'                    // L
+  ]];
+
+  const headerRange = sheet.getRange(1, 1, 1, LAST_COL);
+  headerRange.setValues(labels);
+
+  // ── Shared formatting ─────────────────────────────────────────────────────
+  headerRange
+    .setBackground('#1155CC')
+    .setFontColor('#FFFFFF')
+    .setFontWeight('bold')
+    .setFontSize(10)
+    .setHorizontalAlignment('center')
+    .setVerticalAlignment('middle')
+    .setWrap(true);
+
+  // ── Col A: Kiji logo (cell-bound image from KAL_LOGO_BASE64) ─────────────
+  try {
+    const cellImage = SpreadsheetApp.newCellImage()
+      .setSourceUrl('data:image/png;base64,' + KAL_LOGO_BASE64)
+      .setAltTextDescription('KAL Logo')
+      .build();
+    sheet.getRange(1, COL.ROW_NUM).setValue(cellImage);
+  } catch (e) {
+    console.error('buildHeaderRow logo: ' + e.message);
+    // Fallback: insert as a floating image anchored to A1
+    try {
+      const blob = Utilities.newBlob(Utilities.base64Decode(KAL_LOGO_BASE64), 'image/png', 'kal_logo.png');
+      sheet.insertImage(blob, COL.ROW_NUM, 1, 4, 4);
+    } catch (e2) {
+      console.error('buildHeaderRow logo fallback: ' + e2.message);
+    }
+  }
+
+  ui.alert('✅ Header row rebuilt successfully!');
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
