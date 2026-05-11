@@ -14,335 +14,542 @@
  *  I(9)  KAL Name Conversion Check
  *  J(10) Destination Drive
  *  K(11) Preferred KAL Template  [dropdown]
- *  L(12) Abstract               [rightmost / user-entered]
+ *  L(12) Abstract               [rightmost / AI-generated]
  */
+
+// ── Column indices (1-based) ──────────────────────────────────────────────────
+const COL = Object.freeze({
+  ROW_NUM:    1,
+  DESC:       2,
+  FILENAME:   3,
+  FILETYPE:   4,
+  VERSION:    5,
+  FOLDER:     6,
+  LINK:       7,
+  FOR_WHO:    8,
+  KAL_CHECK:  9,
+  DEST_DRIVE: 10,
+  TEMPLATE:   11,
+  ABSTRACT:   12
+});
+
+const LAST_COL   = COL.ABSTRACT; // rightmost data column
+const DATA_START = 2;            // row 1 = header; data begins on row 2
+
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('💠 KAL File System')
     .addItem('🎯 Audit & Sync Selected File', 'updateSelectedInfo')
-    .addItem('🔄 Audit & Sync All Files', 'updateAllInfo')
+    .addItem('🔄 Audit & Sync All Files',     'updateAllInfo')
     .addSeparator()
-    .addItem('🏗️ Create Selected File', 'createSelectedFile')
+    .addItem('🏗️ Create Selected File',   'createSelectedFile')
     .addItem('🗑️ Remove Selected Version', 'removeSelectedFile')
-    .addItem('☢️ Remove All Versions', 'removeAllVersions')
+    .addItem('☢️ Remove All Versions',     'removeAllVersions')
     .addSeparator()
     .addItem('📖 Show The User Guide', 'showUserGuide')
     .addToUi();
-  updateTemplateDropdown();
+  try { updateTemplateDropdown(); } catch (_) { /* non-fatal on open */ }
 }
 
-/** HELPER: Extracts hidden URLs from cells (Rich Text) */
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Returns the URL from a cell by reading rich-text link first, then plain value. */
 function getUrlFromCell(sheetName, cellAddress) {
   try {
-    const cell = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName).getRange(cellAddress);
-    const richText = cell.getRichTextValue();
-    let url = richText.getLinkUrl();
-    if (!url) url = cell.getValue().toString().trim();
-    return url;
-  } catch (e) { return null; }
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
+    if (!sheet) return null;
+    const cell = sheet.getRange(cellAddress);
+    const url  = cell.getRichTextValue().getLinkUrl() || cell.getValue().toString().trim();
+    return url || null;
+  } catch (_) { return null; }
 }
 
+/** Extracts a Google Drive file/folder ID from a URL. */
 function getIdFromUrl(url) {
   if (!url) return null;
-  const match = url.match(/[-\w]{25,}/);
-  return match ? match[0] : null;
+  const m = url.match(/[-\w]{25,}/);
+  return m ? m[0] : null;
 }
 
-/** 1. DROPDOWN FETCHER */
+/** Maps a MIME type to a short human-readable label. */
+function formatMimeType(mime) {
+  const MAP = {
+    'application/vnd.google-apps.document':     'G-Doc',
+    'application/vnd.google-apps.spreadsheet':  'G-Sheet',
+    'application/vnd.google-apps.presentation': 'G-Slide',
+    'application/pdf': 'PDF'
+  };
+  return MAP[mime] || 'File';
+}
+
+// ── 1. DROPDOWN FETCHER ───────────────────────────────────────────────────────
+
 function getTemplateList() {
-  const folderUrl = getUrlFromCell("Settings", "B2");
-  const folderId = getIdFromUrl(folderUrl);
+  const folderId = getIdFromUrl(getUrlFromCell('Settings', 'B2'));
   if (!folderId) return [];
   try {
-    const folder = DriveApp.getFolderById(folderId);
-    const files = folder.getFiles();
     const names = [];
-    while (files.hasNext()) { names.push(files.next().getName()); }
+    const files = DriveApp.getFolderById(folderId).getFiles();
+    while (files.hasNext()) names.push(files.next().getName());
     return names;
-  } catch (e) { return []; }
+  } catch (e) {
+    console.error('getTemplateList: ' + e.message);
+    return [];
+  }
 }
 
-/** 2. CORE AUDIT ENGINE (With CamelCase Smart Splitter) */
-function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, templateList) {
-  let baseName = sheet.getRange(r, 3).getValue().toString().trim();
-  let dropdownCell = sheet.getRange(r, 11); // Col K: Preferred KAL Template
+// ── 2. CORE AUDIT ENGINE ──────────────────────────────────────────────────────
 
+/**
+ * Audits one row and writes results to the sheet.
+ *
+ * @param {Sheet}    sheet
+ * @param {number}   r                 1-based row index
+ * @param {Object}   driveUrlLookup    DRIVE_CODE → folder URL
+ * @param {Set}      validEntities
+ * @param {Set}      validDocs
+ * @param {string[]} templateList
+ * @param {string}   [preloadedName]   pre-fetched col C value (avoids an extra read in batch mode)
+ * @param {boolean}  [applyBg=true]    set false in batch mode; caller batch-writes backgrounds
+ * @returns {string|null}              background colour for this row
+ */
+function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, templateList, preloadedName, applyBg) {
+  if (applyBg === undefined) applyBg = true;
+
+  const baseName = (preloadedName !== undefined)
+    ? preloadedName
+    : sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
+
+  const dropdownCell = sheet.getRange(r, COL.TEMPLATE);
+
+  // ── Empty row: clear everything and exit ────────────────────────────────
   if (!baseName) {
-    sheet.getRange(r, 1, 1, 2).clearContent();
-    sheet.getRange(r, 4, 1, 8).clearContent();    // cols D–K (File Type … Preferred KAL Template)
-    sheet.getRange(r, 12).clearContent();          // col L: Abstract
-    sheet.getRange(r, 2, 1, 11).setBackground(null); // cols B–L
-    dropdownCell.clearContent().clearDataValidations();
-    return;
+    sheet.getRange(r, COL.ROW_NUM, 1, 2).clearContent();                        // A–B
+    sheet.getRange(r, COL.FILETYPE, 1, LAST_COL - COL.FILETYPE + 1).clearContent(); // D–L
+    dropdownCell.clearDataValidations();
+    if (applyBg) sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(null);
+    return null;
   }
 
-  // --- SMART DESCRIPTION EXTRACTOR ---
-  let nameParts = baseName.split(/[-_]/);
+  // ── Smart description extractor (CamelCase splitter) ────────────────────
+  const nameParts = baseName.split(/[-_]/);
 
   if (nameParts.length >= 4) {
-    let descriptionRaw = nameParts.slice(3).join("");
-    let cleanDescription = descriptionRaw
-      .replace(/([a-z])([A-Z])/g, '$1 $2')       // "FileRegister" -> "File Register"
-      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2'); // "PPFile" -> "PP File"
-    sheet.getRange(r, 2).setValue(cleanDescription.trim());
+    const raw   = nameParts.slice(3).join('');
+    const clean = raw
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+      .trim();
+    sheet.getRange(r, COL.DESC).setValue(clean);
   }
 
-  let driveCodeRaw   = (nameParts[0] || "").trim();
-  let entityCodeRaw  = (nameParts[1] || "").trim();
-  let docTypeCodeRaw = (nameParts[2] || "").trim();
+  const driveRaw   = (nameParts[0] || '').trim();
+  const entityRaw  = (nameParts[1] || '').trim();
+  const docTypeRaw = (nameParts[2] || '').trim();
 
-  let diagnostics = [];
-  if (!driveUrlLookup[driveCodeRaw.toUpperCase()]) {
-    diagnostics.push("Invalid Drive Code");
-  } else if (driveCodeRaw !== driveCodeRaw.toUpperCase()) {
-    diagnostics.push("Drive Code must be UPPERCASE");
+  const driveCode   = driveRaw.toUpperCase();
+  const entityCode  = entityRaw.toUpperCase();
+  const docTypeCode = docTypeRaw.toUpperCase();
+
+  // ── Validation (O(1) Set lookups) ───────────────────────────────────────
+  const diagnostics = [];
+
+  if (!driveUrlLookup[driveCode]) {
+    diagnostics.push('Invalid Drive Code');
+  } else if (driveRaw !== driveCode) {
+    diagnostics.push('Drive Code must be UPPERCASE');
   }
 
-  if (validEntities.indexOf(entityCodeRaw.toUpperCase()) === -1) {
-    diagnostics.push("Unregistered Entity");
-  } else if (entityCodeRaw !== entityCodeRaw.toUpperCase()) {
-    diagnostics.push("Entity Code must be UPPERCASE");
+  if (!validEntities.has(entityCode)) {
+    diagnostics.push('Unregistered Entity');
+  } else if (entityRaw !== entityCode) {
+    diagnostics.push('Entity Code must be UPPERCASE');
   }
 
-  if (validDocs.indexOf(docTypeCodeRaw.toUpperCase()) === -1) {
-    diagnostics.push("Invalid DocType");
-  } else if (docTypeCodeRaw !== docTypeCodeRaw.toUpperCase()) {
-    diagnostics.push("DocType must be UPPERCASE");
+  if (!validDocs.has(docTypeCode)) {
+    diagnostics.push('Invalid DocType');
+  } else if (docTypeRaw !== docTypeCode) {
+    diagnostics.push('DocType must be UPPERCASE');
   }
 
-  let status = diagnostics.length > 0 ? diagnostics.join(" | ") : "OK";
-  sheet.getRange(r, 9).setValue(status); // Col I: KAL Name Conversion Check
+  const status = diagnostics.length > 0 ? diagnostics.join(' | ') : 'OK';
+  sheet.getRange(r, COL.KAL_CHECK).setValue(status);
 
-  // Col J (10): Destination Drive
-  if (driveUrlLookup[driveCodeRaw.toUpperCase()]) {
-    sheet.getRange(r, 10).setFormula('=HYPERLINK("' + driveUrlLookup[driveCodeRaw.toUpperCase()] + '", "' + driveCodeRaw.toUpperCase() + ' Drive")');
+  // ── Col J: Destination Drive ─────────────────────────────────────────────
+  const driveUrl = driveUrlLookup[driveCode];
+  if (driveUrl) {
+    sheet.getRange(r, COL.DEST_DRIVE)
+      .setFormula('=HYPERLINK("' + driveUrl + '", "' + driveCode + ' Drive")');
   } else {
-    sheet.getRange(r, 10).clearContent();
+    sheet.getRange(r, COL.DEST_DRIVE).clearContent();
   }
 
-  let info = GET_SMART_DETAILS(baseName);
-  sheet.getRange(r, 4, 1, 5).clearContent();
+  // ── Drive file lookup ────────────────────────────────────────────────────
+  const info = GET_SMART_DETAILS(baseName);
+  sheet.getRange(r, COL.FILETYPE, 1, COL.FOR_WHO - COL.FILETYPE + 1).clearContent(); // D–H
 
-  if (info.fileLink !== "Not Found") {
-    sheet.getRange(r, 4).setValue(info.type);
-    sheet.getRange(r, 5).setValue(info.version);
-    sheet.getRange(r, 6).setFormula('=HYPERLINK("' + info.folderLink + '", "' + info.folderName + '")');
-    sheet.getRange(r, 7).setFormula('=HYPERLINK("' + info.fileLink + '", "Link")');
-    sheet.getRange(r, 8).setValue(entityCodeRaw.toUpperCase());
+  if (info.fileLink !== 'Not Found') {
+    // Batch-write plain values D and E in one call
+    sheet.getRange(r, COL.FILETYPE, 1, 2).setValues([[info.type, info.version]]);
+    sheet.getRange(r, COL.FOLDER)
+      .setFormula('=HYPERLINK("' + info.folderLink + '", "' + info.folderName + '")');
+    sheet.getRange(r, COL.LINK)
+      .setFormula('=HYPERLINK("' + info.fileLink + '", "Link")');
+    sheet.getRange(r, COL.FOR_WHO).setValue(entityCode);
     dropdownCell.clearContent().clearDataValidations();
   } else {
-    sheet.getRange(r, 7).setValue("File not found");
+    sheet.getRange(r, COL.LINK).setValue('File not found');
     if (templateList && templateList.length > 0) {
-      const rule = SpreadsheetApp.newDataValidation().requireValueInList(templateList).setAllowInvalid(false).build();
+      const rule = SpreadsheetApp.newDataValidation()
+        .requireValueInList(templateList)
+        .setAllowInvalid(false)
+        .build();
       dropdownCell.setDataValidation(rule);
     }
   }
 
-  // Col L (12): Abstract — auto-generated AI summary
-  sheet.getRange(r, 12).setFormula(
+  // ── Col L: Abstract (AI-generated summary) ───────────────────────────────
+  sheet.getRange(r, COL.ABSTRACT).setFormula(
     '=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'
   );
 
-  let color = status !== "OK" ? "#f4cccc" : (info.version === "FINAL" ? "#d9ead3" : null);
-  sheet.getRange(r, 2, 1, 11).setBackground(color); // cols B–L (includes Abstract at col 12)
+  // ── Row background ───────────────────────────────────────────────────────
+  const color = status !== 'OK' ? '#f4cccc' : (info.version === 'FINAL' ? '#d9ead3' : null);
+  if (applyBg) sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(color);
+  return color;
 }
 
-/** 3. SYNC LOGIC */
+// ── 3. SYNC LOGIC ─────────────────────────────────────────────────────────────
+
+/**
+ * Reads the Levels sheet once and returns lookup structures.
+ * Uses Sets for O(1) entity/docType validation.
+ *
+ * @returns {{ driveUrlLookup: Object, validEntities: Set, validDocs: Set }}
+ */
 function getLevelsData() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const levelsSheet = ss.getSheetByName("Levels");
+  const ss          = SpreadsheetApp.getActiveSpreadsheet();
+  const levelsSheet = ss.getSheetByName('Levels');
+  if (!levelsSheet) throw new Error('Sheet "Levels" not found. Check your spreadsheet setup.');
+
   const lastRow = levelsSheet.getLastRow();
-  const lvRange = levelsSheet.getRange(1, 1, lastRow, 7);
-  const lvValues = lvRange.getValues();
-  const lvRichText = lvRange.getRichTextValues();
-  const driveUrlLookup = {}; const validEntities = []; const validDocs = [];
+  if (lastRow < 2) return { driveUrlLookup: {}, validEntities: new Set(), validDocs: new Set() };
+
+  // Single range read covering both values and rich-text in one fetch
+  const range     = levelsSheet.getRange(1, 1, lastRow, 7);
+  const lvValues  = range.getValues();
+  const lvRich    = range.getRichTextValues();
+
+  const driveUrlLookup = {};
+  const validEntities  = new Set();
+  const validDocs      = new Set();
+
   for (let j = 1; j < lvValues.length; j++) {
-    let driveCode = String(lvValues[j][0]).toUpperCase().trim();
-    let hiddenUrl = lvRichText[j][1] ? lvRichText[j][1].getLinkUrl() : null;
+    const driveCode = String(lvValues[j][0]).toUpperCase().trim();
+    const hiddenUrl = lvRich[j][1] ? lvRich[j][1].getLinkUrl() : null;
     if (driveCode && hiddenUrl) driveUrlLookup[driveCode] = hiddenUrl;
-    let entity = String(lvValues[j][3]).toUpperCase().trim();
-    if (entity) validEntities.push(entity);
-    let docType = String(lvValues[j][6]).toUpperCase().trim();
-    if (docType) validDocs.push(docType);
+
+    const entity = String(lvValues[j][3]).toUpperCase().trim();
+    if (entity) validEntities.add(entity);
+
+    const docType = String(lvValues[j][6]).toUpperCase().trim();
+    if (docType) validDocs.add(docType);
   }
+
   return { driveUrlLookup, validEntities, validDocs };
 }
 
+/**
+ * Audits every data row.
+ * Performance strategy:
+ *  - Reads the entire filename column (C) in one batch API call before the loop.
+ *  - Passes each baseName into processAuditForRow to skip a per-row read.
+ *  - Collects background colours and row numbers, then writes them in two
+ *    batch API calls after the loop instead of N individual calls.
+ */
 function updateAllInfo() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getActiveSheet();
-  const data = getLevelsData();
-  const templateList = getTemplateList();
-  for (let r = 2; r <= sheet.getLastRow(); r++) {
-    processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList);
-    if (sheet.getRange(r, 3).getValue()) sheet.getRange(r, 1).setValue(r - 1);
+  const sheet   = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) return;
+
+  let data, templateList;
+  try {
+    data         = getLevelsData();
+    templateList = getTemplateList();
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('⚠️ Setup error: ' + e.message);
+    return;
+  }
+
+  const numRows   = lastRow - DATA_START + 1;
+  // Batch-read all filenames in col C (one API call)
+  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, numRows, 1).getValues();
+
+  const bgColors = []; // 2-D array for batch setBackgrounds
+  const rowNums  = []; // 2-D array for batch setValues (col A)
+  let errors = 0;
+
+  for (let i = 0; i < numRows; i++) {
+    const r        = DATA_START + i;
+    const baseName = String(fileNames[i][0]).trim();
+    try {
+      // applyBg = false: we batch-write backgrounds after the loop
+      const color = processAuditForRow(
+        sheet, r,
+        data.driveUrlLookup, data.validEntities, data.validDocs,
+        templateList, baseName, false
+      );
+      const numBgCols = LAST_COL - COL.DESC + 1;
+      bgColors.push(Array(numBgCols).fill(color));
+      rowNums.push([baseName ? r - 1 : '']);
+    } catch (e) {
+      console.error('Row ' + r + ': ' + e.message);
+      bgColors.push(Array(LAST_COL - COL.DESC + 1).fill('#fff2cc')); // amber = script error
+      rowNums.push(['?']);
+      errors++;
+    }
+  }
+
+  // Two batch writes replace N×11 individual setBackground calls + N setValue calls
+  sheet.getRange(DATA_START, COL.DESC, numRows, LAST_COL - COL.DESC + 1).setBackgrounds(bgColors);
+  sheet.getRange(DATA_START, COL.ROW_NUM, numRows, 1).setValues(rowNums);
+
+  if (errors > 0) {
+    SpreadsheetApp.getUi().alert(
+      '⚠️ ' + errors + ' row(s) hit errors. Open View → Logs for details.'
+    );
   }
 }
 
 function updateSelectedInfo() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getActiveSheet();
-  const r = sheet.getActiveRange().getRow();
-  if (r < 2) return;
-  const data = getLevelsData();
-  const templateList = getTemplateList();
-  processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList);
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const r     = sheet.getActiveRange().getRow();
+    if (r < DATA_START) return;
+    const data         = getLevelsData();
+    const templateList = getTemplateList();
+    processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList);
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('⚠️ Audit error: ' + e.message);
+  }
 }
 
-/** 4. DRIVE SEARCH ENGINE */
+// ── 4. DRIVE SEARCH ENGINE ────────────────────────────────────────────────────
+
+/**
+ * Finds the latest versioned Drive file whose name starts with baseName.
+ *
+ * Performance: regex is compiled once before the iteration, not inside the loop.
+ *
+ * @param {string} baseName
+ * @returns {{ type, version, folderName, folderLink, fileLink }}
+ */
 function GET_SMART_DETAILS(baseName) {
-  const files = DriveApp.searchFiles("title contains '" + baseName + "'");
+  const NOT_FOUND = {
+    type: '', version: 'Not Found',
+    folderName: 'Not Found', folderLink: '', fileLink: 'Not Found'
+  };
+  if (!baseName) return NOT_FOUND;
+
+  // Compile regex once outside the while loop
+  const escaped   = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const versionRe = new RegExp(escaped + '.*[vV](\\d+|FINAL)', 'i');
+
   let latestVerNum = -1;
-  let details = { type: "", version: "Not Found", folderName: "Not Found", folderLink: "", fileLink: "Not Found" };
-  while (files.hasNext()) {
-    let file = files.next();
-    let name = file.getName();
-    let regex = new RegExp(baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ".*[vV](\\d+|FINAL)", "i");
-    let match = name.match(regex);
-    if (match) {
-      let vSuffix = match[1].toUpperCase();
-      let vNum = (vSuffix === "FINAL") ? 9999 : parseInt(vSuffix, 10);
-      if (vNum > latestVerNum) {
-        latestVerNum = vNum;
-        details.version = vSuffix;
-        details.fileLink = file.getUrl();
-        details.type = formatMimeType(file.getMimeType());
-        let parents = file.getParents();
-        if (parents.hasNext()) {
-          let p = parents.next();
-          details.folderName = p.getName();
-          details.folderLink = p.getUrl();
-        }
+  const details    = Object.assign({}, NOT_FOUND);
+
+  try {
+    const files = DriveApp.searchFiles("title contains '" + baseName + "'");
+    while (files.hasNext()) {
+      const file  = files.next();
+      const match = file.getName().match(versionRe);
+      if (!match) continue;
+
+      const vSuffix = match[1].toUpperCase();
+      const vNum    = vSuffix === 'FINAL' ? 9999 : parseInt(vSuffix, 10);
+      if (vNum <= latestVerNum) continue;
+
+      latestVerNum     = vNum;
+      details.version  = vSuffix;
+      details.fileLink = file.getUrl();
+      details.type     = formatMimeType(file.getMimeType());
+
+      const parents = file.getParents();
+      if (parents.hasNext()) {
+        const p = parents.next();
+        details.folderName = p.getName();
+        details.folderLink = p.getUrl();
       }
     }
+  } catch (e) {
+    console.error('GET_SMART_DETAILS("' + baseName + '"): ' + e.message);
   }
+
   return details;
 }
 
-/** 5. FILE MANAGEMENT */
+// ── 5. FILE MANAGEMENT ────────────────────────────────────────────────────────
+
 function createSelectedFile() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui    = SpreadsheetApp.getUi();
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getActiveSheet();
-  const r = sheet.getActiveRange().getRow();
-  if (r < 2) return;
+  const r     = sheet.getActiveRange().getRow();
+  if (r < DATA_START) return;
 
-  let baseName     = sheet.getRange(r, 3).getValue().toString().trim();
-  let templateName = sheet.getRange(r, 11).getValue().toString().trim(); // Col K: Preferred KAL Template
+  const baseName     = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
+  const templateName = sheet.getRange(r, COL.TEMPLATE).getValue().toString().trim();
 
-  const data = getLevelsData();
-  const templateList = getTemplateList();
-  processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList);
-  let nameStatus = sheet.getRange(r, 9).getValue().toString().trim();
+  if (!baseName) { ui.alert('🛑 No filename found in this row.'); return; }
 
-  if (!baseName || nameStatus !== "OK" || !templateName) {
-    SpreadsheetApp.getUi().alert("🛑 Check name status and template selection.");
+  let data, templateList;
+  try {
+    data         = getLevelsData();
+    templateList = getTemplateList();
+  } catch (e) {
+    ui.alert('⚠️ Setup error: ' + e.message);
     return;
   }
 
-  if (GET_SMART_DETAILS(baseName).fileLink !== "Not Found") {
-    SpreadsheetApp.getUi().alert("🛑 File already exists.");
+  processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList);
+  const nameStatus = sheet.getRange(r, COL.KAL_CHECK).getValue().toString().trim();
+
+  if (nameStatus !== 'OK') {
+    ui.alert('🛑 File name has issues:\n' + nameStatus);
+    return;
+  }
+  if (!templateName) {
+    ui.alert('🛑 Select a template from the dropdown (col K) first.');
+    return;
+  }
+  if (GET_SMART_DETAILS(baseName).fileLink !== 'Not Found') {
+    ui.alert('🛑 File already exists in Drive.');
     return;
   }
 
   try {
-    const destUrl = getUrlFromCell("Settings", "A2");
-    const dateString = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), "yyyyMMdd");
-    const finalFileName = baseName + "_" + dateString + "_v1";
+    const destId = getIdFromUrl(getUrlFromCell('Settings', 'A2'));
+    if (!destId) throw new Error('Destination folder URL missing or invalid in Settings!A2.');
 
-    const tempFolder = DriveApp.getFolderById(getIdFromUrl(getUrlFromCell("Settings", "B2")));
-    const templateFiles = tempFolder.getFilesByName(templateName);
-    if (templateFiles.hasNext()) {
-      templateFiles.next().makeCopy(finalFileName, DriveApp.getFolderById(getIdFromUrl(destUrl)));
-      updateSelectedInfo();
-      SpreadsheetApp.getUi().alert("✅ Success!");
+    const tempFolderId = getIdFromUrl(getUrlFromCell('Settings', 'B2'));
+    if (!tempFolderId) throw new Error('Template folder URL missing or invalid in Settings!B2.');
+
+    const dateStr       = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
+    const finalFileName = baseName + '_' + dateStr + '_v1';
+
+    const templateFiles = DriveApp.getFolderById(tempFolderId).getFilesByName(templateName);
+    if (!templateFiles.hasNext()) {
+      ui.alert('🛑 Template "' + templateName + '" not found in the templates folder.');
+      return;
     }
-  } catch (e) { SpreadsheetApp.getUi().alert(e.message); }
+    templateFiles.next().makeCopy(finalFileName, DriveApp.getFolderById(destId));
+    updateSelectedInfo();
+    ui.alert('✅ "' + finalFileName + '" created successfully!');
+  } catch (e) {
+    ui.alert('❌ Creation failed: ' + e.message);
+  }
 }
 
 function removeSelectedFile() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getActiveSheet();
-  const r = sheet.getActiveRange().getRow();
-  const fileUrl = sheet.getRange(r, 7).getRichTextValue().getLinkUrl();
-  if (!fileUrl) return;
+  const ui    = SpreadsheetApp.getUi();
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const r     = sheet.getActiveRange().getRow();
 
-  const response = SpreadsheetApp.getUi().alert("⚠️ Warning", "Move THIS version to Trash?", SpreadsheetApp.getUi().ButtonSet.YES_NO);
-  if (response == SpreadsheetApp.getUi().Button.YES) {
-    DriveApp.getFileById(getIdFromUrl(fileUrl)).setTrashed(true);
+  let fileUrl = null;
+  try { fileUrl = sheet.getRange(r, COL.LINK).getRichTextValue().getLinkUrl(); } catch (_) {}
+  if (!fileUrl) { ui.alert('🛑 No file link found in this row.'); return; }
+
+  const fileId = getIdFromUrl(fileUrl);
+  if (!fileId) { ui.alert('🛑 Could not parse a file ID from the link.'); return; }
+
+  const response = ui.alert('⚠️ Warning', 'Move THIS version to Trash?', ui.ButtonSet.YES_NO);
+  if (response !== ui.Button.YES) return;
+
+  try {
+    DriveApp.getFileById(fileId).setTrashed(true);
     updateSelectedInfo();
+  } catch (e) {
+    ui.alert('❌ Could not trash the file: ' + e.message);
   }
 }
 
 function removeAllVersions() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getActiveSheet();
-  const r = sheet.getActiveRange().getRow();
-  const baseName = sheet.getRange(r, 3).getValue().toString().trim();
+  const ui       = SpreadsheetApp.getUi();
+  const sheet    = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const r        = sheet.getActiveRange().getRow();
+  const baseName = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
   if (!baseName) return;
 
-  const response = SpreadsheetApp.getUi().alert("☢️ NUCLEAR WARNING", "Trash EVERY version of: " + baseName, SpreadsheetApp.getUi().ButtonSet.YES_NO);
-  if (response == SpreadsheetApp.getUi().Button.YES) {
+  const response = ui.alert(
+    '☢️ NUCLEAR WARNING',
+    'Trash EVERY version of: ' + baseName,
+    ui.ButtonSet.YES_NO
+  );
+  if (response !== ui.Button.YES) return;
+
+  let trashed = 0, failed = 0;
+  try {
     const files = DriveApp.searchFiles("title contains '" + baseName + "'");
-    let count = 0;
     while (files.hasNext()) {
-      files.next().setTrashed(true);
-      count++;
+      try {
+        files.next().setTrashed(true);
+        trashed++;
+      } catch (e) {
+        console.error('removeAllVersions trash: ' + e.message);
+        failed++;
+      }
     }
-    updateSelectedInfo();
-    SpreadsheetApp.getUi().alert("Trashed " + count + " file(s).");
+  } catch (e) {
+    ui.alert('❌ Drive search failed: ' + e.message);
+    return;
+  }
+
+  updateSelectedInfo();
+  ui.alert('Trashed ' + trashed + ' file(s).' + (failed > 0 ? ' (' + failed + ' failed — check Logs)' : ''));
+}
+
+// ── 6. UI ─────────────────────────────────────────────────────────────────────
+
+function showUserGuide() {
+  try {
+    const template = HtmlService.createTemplateFromFile('Sidebar');
+    template.logoBase64 = KAL_LOGO_BASE64;
+    const html = template.evaluate().setTitle('KAL File System').setWidth(350);
+    SpreadsheetApp.getUi().showSidebar(html);
+  } catch (e) {
+    SpreadsheetApp.getUi().alert('❌ Could not load the User Guide: ' + e.message);
   }
 }
 
-function formatMimeType(mime) {
-  const types = {
-    "application/vnd.google-apps.document":     "G-Doc",
-    "application/vnd.google-apps.spreadsheet":  "G-Sheet",
-    "application/vnd.google-apps.presentation": "G-Slide",
-    "application/pdf": "PDF"
-  };
-  return types[mime] || "File";
-}
+// ── 7. ACADEMY SIDEBAR DATA ───────────────────────────────────────────────────
 
-function showUserGuide() {
-  const template = HtmlService.createTemplateFromFile('Sidebar');
-  template.logoBase64 = KAL_LOGO_BASE64;
-  const html = template.evaluate()
-    .setTitle('KAL File System')
-    .setWidth(350);
-  SpreadsheetApp.getUi().showSidebar(html);
-}
-
-/**
- * Fetches all registered codes and smart description examples for the Academy sidebar.
- */
 function getAcademyCodes() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const levelsSheet = ss.getSheetByName("Levels");
-  const lastRow = levelsSheet.getLastRow();
+  const EMPTY = { drives: [], entities: [], docTypes: [], examples: [] };
+  try {
+    const levelsSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Levels');
+    if (!levelsSheet) return EMPTY;
 
-  if (lastRow < 3) return { drives: [], entities: [], docTypes: [], examples: [] };
+    const lastRow = levelsSheet.getLastRow();
+    if (lastRow < 3) return EMPTY;
 
-  // Adjusted range to include Column I (index 8) and Column J (index 9)
-  const values = levelsSheet.getRange(3, 1, lastRow - 2, 10).getValues();
+    const values   = levelsSheet.getRange(3, 1, lastRow - 2, 10).getValues();
+    const drives   = [];
+    const entities = [];
+    const docTypes = [];
+    const examples = [];
 
-  let driveList   = [];
-  let entityList  = [];
-  let docTypeList = [];
-  let exampleList = [];
+    values.forEach(row => {
+      if (row[0]) drives.push({ code: row[0], name: row[2] });
+      if (row[3]) entities.push({ code: row[3], name: row[4] });
+      if (row[6]) docTypes.push({ code: row[6], name: row[7] });
+      if (row[8]) examples.push({ input: row[8], output: row[9] });
+    });
 
-  values.forEach(row => {
-    if (row[0]) driveList.push({ code: row[0], name: row[2] });
-    if (row[3]) entityList.push({ code: row[3], name: row[4] });
-    if (row[6]) docTypeList.push({ code: row[6], name: row[7] });
-    // Captures CamelCase examples from Column I and J
-    if (row[8]) exampleList.push({ input: row[8], output: row[9] });
-  });
-
-  return {
-    drives:   driveList,
-    entities: entityList,
-    docTypes: docTypeList,
-    examples: exampleList
-  };
+    return { drives, entities, docTypes, examples };
+  } catch (e) {
+    console.error('getAcademyCodes: ' + e.message);
+    return EMPTY;
+  }
 }
