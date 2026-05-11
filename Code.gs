@@ -15,26 +15,9 @@
  *  J(10) Destination Drive
  *  K(11) Preferred KAL Template  [dropdown]
  *  L(12) Abstract               [rightmost / AI-generated]
+ *
+ * NOTE: COL, LAST_COL, and DATA_START are defined in Constants.gs.
  */
-
-// ── Column indices (1-based) ──────────────────────────────────────────────────
-const COL = Object.freeze({
-  ROW_NUM:    1,
-  DESC:       2,
-  FILENAME:   3,
-  FILETYPE:   4,
-  VERSION:    5,
-  FOLDER:     6,
-  LINK:       7,
-  FOR_WHO:    8,
-  KAL_CHECK:  9,
-  DEST_DRIVE: 10,
-  TEMPLATE:   11,
-  ABSTRACT:   12
-});
-
-const LAST_COL   = COL.ABSTRACT; // rightmost data column
-const DATA_START = 2;            // row 1 = header; data begins on row 2
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
