@@ -980,7 +980,7 @@
     <div class="section-body">
       <p>In a traditional system, a filename is just a label. In the KAL System, a filename is <strong>code</strong>. When the AI reads a structured name it performs instant <strong>decompression</strong> of a high-density metadata packet:</p>
       <div class="name-format" style="font-size:10px;margin:10px 0;">
-        <span class="seg">20260512</span><span class="sep">_</span><span class="seg">OP</span><span class="sep">-</span><span class="seg">KAL</span><span class="sep">_</span><span class="seg">STRAT</span><span class="sep">_</span><span class="seg">TheKijiModel</span><span class="sep">_</span><span class="seg">v3</span>
+        <span class="seg">OP</span><span class="sep">-</span><span class="seg">KAL</span><span class="sep">_</span><span class="seg">STRAT</span><span class="sep">_</span><span class="seg">TheKijiModel</span><span class="sep">_</span><span class="seg">20260512</span><span class="sep">_</span><span class="seg">v3</span>
       </div>
       <table class="col-table">
         <tr><th>Segment</th><th>Signal decoded by AI</th></tr>
@@ -988,7 +988,8 @@
         <tr><td class="col-letter">KAL</td><td>Corporate identity → KAL Academy voice</td></tr>
         <tr><td class="col-letter">STRAT</td><td>Tonal trigger → visionary, strategic</td></tr>
         <tr><td class="col-letter">TheKijiModel</td><td>Token split → "Kiji" + "Model" keywords</td></tr>
-        <tr><td class="col-letter">v3</td><td>Temporal context → draft authority level</td></tr>
+        <tr><td class="col-letter">20260512</td><td>Temporal context → chronological ordering</td></tr>
+        <tr><td class="col-letter">v3</td><td>Version authority → draft vs. final tone</td></tr>
       </table>
     </div>
   </div>
@@ -1045,17 +1046,17 @@
       <span class="icon">▼</span>
     </div>
     <div class="section-body">
-      <p>One of the most powerful features of the KAL System is knowing <strong>when not to work</strong>.</p>
+      <p>One of the most powerful features of the KAL System is knowing <strong>when not to open files</strong>. During a Drive search or bulk audit, the system must decide which files actually need to be read.</p>
       <div class="status-row green-row" style="margin-bottom:5px;">
         <div class="dot dot-green"></div>
-        <div><strong>State Recognition</strong><br><span style="font-size:11px;">Rows marked 🟢 or <code>vFINAL</code> are identified as complete.</span></div>
+        <div><strong>State Recognition</strong><br><span style="font-size:11px;">Rows marked 🟢 or <code>vFINAL</code> are identified as already complete.</span></div>
       </div>
       <div class="status-row none-row">
         <div class="dot dot-none"></div>
-        <div><strong>The Skip Logic</strong><br><span style="font-size:11px;">Finalised files are bypassed during bulk syncs — their abstracts are not regenerated.</span></div>
+        <div><strong>The Skip Logic</strong><br><span style="font-size:11px;">Finalised files are skipped entirely — the system does not open or re-read them in Drive during the search.</span></div>
       </div>
       <div class="info-box" style="margin-top:8px;">
-        <strong>The payoff:</strong> Custom-edited abstracts are preserved · API costs are slashed · Hundreds of files audited in seconds, not minutes.
+        <strong>The payoff:</strong> No unnecessary Drive file opens · Search stays fast at scale · Hundreds of files processed in seconds, not minutes.
       </div>
     </div>
   </div>
