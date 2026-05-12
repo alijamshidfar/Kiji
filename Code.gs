@@ -560,14 +560,33 @@ function openCurrentFolder() {
   const r     = sheet.getActiveRange().getRow();
   if (r < DATA_START) return;
 
+  const cell = sheet.getRange(r, COL.FOLDER);
+
+  // 1. Try rich-text link (manually set hyperlinks)
   let folderUrl = null;
-  try { folderUrl = sheet.getRange(r, COL.FOLDER).getRichTextValue().getLinkUrl(); } catch (_) {}
+  try { folderUrl = cell.getRichTextValue().getLinkUrl(); } catch (_) {}
+
+  // 2. Fall back to parsing =HYPERLINK("url","label") formula
+  if (!folderUrl) {
+    try {
+      const formula = cell.getFormula();
+      const m = formula.match(/=HYPERLINK\(\s*"([^"]+)"/i);
+      if (m) folderUrl = m[1];
+    } catch (_) {}
+  }
+
   if (!folderUrl) { toast('No folder link found for this row.', '⚠️ Warning', 5); return; }
 
+  // Show a clickable link — window.open() is blocked by most browsers inside GAS dialogs
   const html = HtmlService.createHtmlOutput(
-    '<script>window.open("' + folderUrl + '","_blank");google.script.host.close();</script>'
-  ).setWidth(10).setHeight(10);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Opening folder…');
+    '<style>body{font-family:Arial,sans-serif;padding:16px;margin:0}</style>' +
+    '<p style="font-size:13px">Click below to open the folder:</p>' +
+    '<p><a href="' + folderUrl + '" target="_blank" ' +
+    'style="font-size:13px;color:#1155CC;font-weight:bold;">📂 Open Folder</a></p>' +
+    '<p style="margin-top:10px"><button onclick="google.script.host.close()" ' +
+    'style="font-size:12px;padding:4px 12px;cursor:pointer;">Close</button></p>'
+  ).setWidth(280).setHeight(120);
+  SpreadsheetApp.getUi().showModalDialog(html, 'Open Folder');
 }
 
 /** Moves the latest file version for the selected row to its Destination Drive folder (col J). */
