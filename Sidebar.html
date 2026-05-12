@@ -442,7 +442,7 @@
           isSvg=raw.indexOf('svg')!==-1;
         }else{
           var mime='image/png';
-          /* SVG base64 starts with PHN2 (<svg) or PD94 (<?xml) */
+          /* Detect SVG: PHN2 prefix = svg element, PD94 prefix = xml declaration */
           if(raw[0]==='/')      mime='image/jpeg';
           else if(raw.substring(0,4)==='PHN2'||raw.substring(0,4)==='PD94'){
             mime='image/svg+xml'; isSvg=true;
