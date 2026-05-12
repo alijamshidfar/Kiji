@@ -964,6 +964,17 @@
     </div>
   </div>
 
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🗺️ Drive Folder Mapping</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p style="font-size:11px;color:var(--grey);margin-bottom:8px;">The six KAL Google Drive folders — click a name to open it.</p>
+      <div id="drivemap-content"><div class="loading">Loading from sheet…</div></div>
+    </div>
+  </div>
+
 </div><!-- /tab-codes -->
 
 <!-- ══════════════════════════════════════
@@ -1137,6 +1148,29 @@
     renderCodeTable('entities-content', data.entities, 'Code', 'Entity');
     renderCodeTable('doctypes-content', data.docTypes, 'Code', 'Document Type');
     renderExamplesTable('camel-content', data.examples);
+    renderDriveMap('drivemap-content', data.drives);
+  }
+
+  function renderDriveMap(containerId, drives) {
+    var mapped = (drives || []).filter(function(d) { return d.folderName || d.folderLink; });
+    if (!mapped.length) {
+      document.getElementById(containerId).innerHTML =
+        '<p style="color:var(--grey);font-size:11px;font-style:italic;">No folder links found in col B of CODES sheet.</p>';
+      return;
+    }
+    var html = '<table class="col-table" style="table-layout:fixed">'
+             + '<tr><th style="width:22%">Code</th><th>Drive Folder</th></tr>';
+    mapped.forEach(function(d) {
+      var label = escHtml(d.folderName || d.code);
+      var cell  = d.folderLink
+        ? '<a href="' + escHtml(d.folderLink) + '" target="_blank"'
+          + ' style="color:var(--blue);font-weight:600;">' + label + '</a>'
+        : label;
+      html += '<tr><td><span class="code-pill">' + escHtml(d.code) + '</span></td>'
+            + '<td style="word-break:break-word">' + cell + '</td></tr>';
+    });
+    html += '</table>';
+    document.getElementById(containerId).innerHTML = html;
   }
 
   function renderCodeTable(containerId, rows, col1, col2) {

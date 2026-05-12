@@ -1112,10 +1112,15 @@ function getAcademyCodes() {
     if (lastRow < 3) return EMPTY;
 
     const values   = sheet.getRange(3, 1, lastRow - 2, 10).getValues();
+    const richB    = sheet.getRange(3, 2, lastRow - 2, 1).getRichTextValues(); // col B folder links
     const drives   = [], entities = [], docTypes = [], examples = [];
 
-    values.forEach(row => {
-      if (row[0]) drives.push({ code: row[0], name: row[2] });
+    values.forEach((row, i) => {
+      if (row[0]) {
+        const folderLink = richB[i][0] ? richB[i][0].getLinkUrl() : null;
+        const folderName = String(row[1] || '').trim();
+        drives.push({ code: row[0], name: row[2], folderName, folderLink });
+      }
       if (row[3]) entities.push({ code: row[3], name: row[4] });
       if (row[6]) docTypes.push({ code: row[6], name: row[7] });
       if (row[8]) examples.push({ input: row[8], output: row[9] });
