@@ -427,15 +427,28 @@
 ══════════════════════════════════════ -->
 <div class="header">
   <div class="header-top">
-    <? if (logoBase64) { ?>
-      <img class="header-logo"
-           src="data:image/png;base64,<?= logoBase64 ?>"
-           alt="KAL Logo"
-           onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='flex';">
-      <div id="logo-fallback" class="header-logo-placeholder" style="display:none;">📁</div>
-    <? } else { ?>
-      <div class="header-logo-placeholder">📁</div>
-    <? } ?>
+    <!-- Placeholder shown by default; JS swaps in real image only on successful load -->
+    <div id="logo-el" class="header-logo-placeholder">📁</div>
+    <script>
+      (function(){
+        var b64='<?= logoBase64 ?>';
+        if(!b64||b64.length<100)return;
+        var img=new Image();
+        img.className='header-logo';
+        img.alt='KAL Logo';
+        img.onload=function(){
+          var el=document.getElementById('logo-el');
+          el.className='header-logo-placeholder';
+          el.style.background='transparent';
+          el.style.padding='0';
+          el.innerHTML='';
+          el.appendChild(img);
+        };
+        /* Auto-detect PNG vs JPEG from first base64 character */
+        var mime=b64[0]==='/'?'image/jpeg':'image/png';
+        img.src='data:'+mime+';base64,'+b64;
+      })();
+    </script>
     <div class="header-title">
       <h1>KAL File Registry</h1>
       <p>Smart File Management System</p>
