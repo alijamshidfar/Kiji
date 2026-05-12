@@ -431,8 +431,10 @@
     <div id="logo-el" class="header-logo-placeholder">📁</div>
     <script>
       (function(){
-        var b64='<?= logoBase64 ?>';
-        if(!b64||b64.length<100)return;
+        var raw='<?= logoBase64 ?>';
+        if(!raw||raw.length<100)return;
+        /* Accept both plain base64 and full data-URI strings */
+        var src=raw.indexOf('base64,')!==-1?raw:'data:image/png;base64,'+raw;
         var img=new Image();
         img.className='header-logo';
         img.alt='KAL Logo';
@@ -444,9 +446,7 @@
           el.innerHTML='';
           el.appendChild(img);
         };
-        /* Auto-detect PNG vs JPEG from first base64 character */
-        var mime=b64[0]==='/'?'image/jpeg':'image/png';
-        img.src='data:'+mime+';base64,'+b64;
+        img.src=src;
       })();
     </script>
     <div class="header-title">
