@@ -235,7 +235,9 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
 
   if (applyBg) {
     sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(color);
-    sheet.getRange(r, COL.ROW_NUM).setValue(r - 1);
+    // Sequential number: count non-blank filename rows from DATA_START up to r
+    const above = sheet.getRange(DATA_START, COL.FILENAME, r - DATA_START + 1, 1).getValues();
+    sheet.getRange(r, COL.ROW_NUM).setValue(above.filter(c => c[0]).length);
   }
   return color;
 }
@@ -343,15 +345,8 @@ function searchMissingKALFiles() {
     }
   }
 
-  // Renumber every row after insertions shifted positions
-  const finalLastRow = sheet.getLastRow();
-  if (finalLastRow >= DATA_START) {
-    const numAll   = finalLastRow - DATA_START + 1;
-    const allNames = sheet.getRange(DATA_START, COL.FILENAME, numAll, 1).getValues();
-    sheet.getRange(DATA_START, COL.ROW_NUM, numAll, 1).setValues(
-      allNames.map((cell, i) => [cell[0] ? DATA_START + i - 1 : ''])
-    );
-  }
+  // Renumber sequentially after insertions
+  renumberAllRows_(sheet);
 
   let summary = 'Added ' + totalMissing + ' file(s): ';
   summary += driveCodes.filter(c => missing[c].length).map(c => c + '- ×' + missing[c].length).join(', ');
@@ -389,6 +384,21 @@ function getDriveCodesOrdered() {
 }
 
 // ── 4. SYNC LOGIC ─────────────────────────────────────────────────────────────
+
+/**
+ * Sequentially numbers every row that has a filename, skipping blank rows.
+ * Row 1 = first non-blank data row, regardless of sheet row position.
+ */
+function renumberAllRows_(sheet) {
+  const last = sheet.getLastRow();
+  if (last < DATA_START) return;
+  const n     = last - DATA_START + 1;
+  const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  let seq = 0;
+  sheet.getRange(DATA_START, COL.ROW_NUM, n, 1).setValues(
+    names.map(row => [row[0] ? ++seq : ''])
+  );
+}
 
 /**
  * Reads the Codes sheet and returns lookup structures.
@@ -439,8 +449,7 @@ function updateAllInfo() {
   const numRows   = lastRow - DATA_START + 1;
   const fileNames = sheet.getRange(DATA_START, COL.FILENAME, numRows, 1).getValues();
   const bgColors  = [];
-  const rowNums   = [];
-  let errors = 0;
+  let seq = 0, errors = 0;
 
   for (let i = 0; i < numRows; i++) {
     const r        = DATA_START + i;
@@ -448,17 +457,15 @@ function updateAllInfo() {
     try {
       const color = processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList, baseName, false);
       bgColors.push(Array(LAST_COL - COL.DESC + 1).fill(color));
-      rowNums.push([baseName ? r - 1 : '']);
     } catch (e) {
       console.error('Row ' + r + ': ' + e.message);
       bgColors.push(Array(LAST_COL - COL.DESC + 1).fill(COLOR.ERROR));
-      rowNums.push(['?']);
       errors++;
     }
   }
 
   sheet.getRange(DATA_START, COL.DESC, numRows, LAST_COL - COL.DESC + 1).setBackgrounds(bgColors);
-  sheet.getRange(DATA_START, COL.ROW_NUM, numRows, 1).setValues(rowNums);
+  renumberAllRows_(sheet);
 
   const msg = errors > 0
     ? 'Done — ' + errors + ' row(s) had errors (View → Logs).'
@@ -873,11 +880,7 @@ function clearAllDiagnostics() {
   const nullBgs = Array(numRows).fill(null).map(() => Array(LAST_COL - COL.DESC + 1).fill(null));
   sheet.getRange(DATA_START, COL.DESC, numRows, LAST_COL - COL.DESC + 1).setBackgrounds(nullBgs);
 
-  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, numRows, 1).getValues();
-  sheet.getRange(DATA_START, COL.ROW_NUM, numRows, 1).setValues(
-    fileNames.map((cell, i) => [cell[0] ? DATA_START + i - 1 : ''])
-  );
-
+  renumberAllRows_(sheet);
   toast('All highlights cleared and rows renumbered.', '🧼 Diagnostics', 3);
 }
 
