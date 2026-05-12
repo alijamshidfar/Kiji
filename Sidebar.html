@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KAL File System – User Guide</title>
+<style>
+  :root {
+    --blue:       #1155CC;
+    --blue-dark:  #0b3d91;
+    --blue-light: #e8f0fe;
+    --blue-mid:   #c7d9f8;
+    --red:        #CC1111;
+    --red-light:  #fce8e6;
+    --green:      #0f7b3c;
+    --green-bg:   #d9ead3;
+    --yellow-bg:  #fff2cc;
+    --red-bg:     #f4cccc;
+    --grey:       #5f6368;
+    --grey-light: #f8f9fa;
+    --border:     #dadce0;
+    --text:       #202124;
+    --radius:     6px;
+    --shadow:     0 1px 4px rgba(0,0,0,.12);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Google Sans', Arial, sans-serif;
+    font-size: 12.5px;
+    color: var(--text);
+    background: #fff;
+    line-height: 1.55;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: linear-gradient(135deg, var(--blue-dark) 0%, var(--blue) 100%);
+    color: #fff;
+    padding: 16px 14px 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+  .header-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .header-logo {
+    width: 40px;
+    height: 40px;
+    object-fit: contain;
+    border-radius: 4px;
+    background: #fff;
+    padding: 2px;
+    flex-shrink: 0;
+  }
+  .header-logo-placeholder {
+    width: 40px;
+    height: 40px;
+    background: rgba(255,255,255,.2);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .header-title {
+    flex: 1;
+  }
+  .header-title h1 {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    line-height: 1.2;
+  }
+  .header-title p {
+    font-size: 10.5px;
+    opacity: .85;
+    margin-top: 2px;
+  }
+
+  /* ── Tab nav ── */
+  .tab-nav {
+    display: flex;
+    gap: 2px;
+    background: rgba(0,0,0,.15);
+    border-radius: var(--radius);
+    padding: 3px;
+  }
+  .tab-btn {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: rgba(255,255,255,.75);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    padding: 5px 3px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: background .15s, color .15s;
+    white-space: nowrap;
+  }
+  .tab-btn.active {
+    background: #fff;
+    color: var(--blue-dark);
+  }
+  .tab-btn:hover:not(.active) {
+    background: rgba(255,255,255,.15);
+    color: #fff;
+  }
+
+  /* ── Content area ── */
+  .content { padding: 14px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Sections ── */
+  .section {
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .section-head {
+    background: var(--blue-light);
+    border-bottom: 2px solid var(--blue);
+    padding: 8px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+  }
+  .section-head h2 {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--blue-dark);
+    text-transform: uppercase;
+    letter-spacing: .4px;
+  }
+  .section-head .icon {
+    font-size: 11px;
+    color: var(--blue);
+    transition: transform .2s;
+  }
+  .section-head.collapsed .icon { transform: rotate(-90deg); }
+  .section-body { padding: 10px; }
+
+  /* ── Typography ── */
+  h3 {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--blue);
+    margin: 10px 0 5px;
+    border-left: 3px solid var(--blue);
+    padding-left: 7px;
+  }
+  h3:first-child { margin-top: 0; }
+  p { margin-bottom: 6px; font-size: 12px; }
+  p:last-child { margin-bottom: 0; }
+
+  /* ── Badges / pills ── */
+  .badge {
+    display: inline-block;
+    font-size: 9.5px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    vertical-align: middle;
+  }
+  .badge-blue  { background: var(--blue);   color: #fff; }
+  .badge-red   { background: var(--red);    color: #fff; }
+  .badge-green { background: var(--green);  color: #fff; }
+  .badge-grey  { background: var(--grey);   color: #fff; }
+
+  /* ── Column table ── */
+  .col-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 6px 0; }
+  .col-table th {
+    background: var(--blue);
+    color: #fff;
+    padding: 5px 6px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  .col-table td {
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .col-table tr:last-child td { border-bottom: none; }
+  .col-table tr:nth-child(even) td { background: var(--grey-light); }
+  .col-letter {
+    font-weight: 700;
+    color: var(--blue-dark);
+    white-space: nowrap;
+    font-size: 10.5px;
+  }
+
+  /* ── Color status rows ── */
+  .status-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 5px;
+    margin-bottom: 6px;
+    font-size: 11.5px;
+  }
+  .status-row:last-child { margin-bottom: 0; }
+  .status-row .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .status-row.red-row    { background: var(--red-bg); }
+  .status-row.yellow-row { background: var(--yellow-bg); }
+  .status-row.green-row  { background: var(--green-bg); }
+  .status-row.none-row   { background: var(--grey-light); border: 1px solid var(--border); }
+  .dot-red    { background: var(--red); }
+  .dot-yellow { background: #f9ab00; }
+  .dot-green  { background: var(--green); }
+  .dot-none   { background: #bbb; }
+
+  /* ── Menu items ── */
+  .menu-item {
+    padding: 7px 9px;
+    border-left: 3px solid transparent;
+    border-radius: 0 4px 4px 0;
+    margin-bottom: 4px;
+    font-size: 11.5px;
+    background: var(--grey-light);
+  }
+  .menu-item.blue  { border-left-color: var(--blue); }
+  .menu-item.red   { border-left-color: var(--red);  }
+  .menu-item.green { border-left-color: var(--green); }
+  .menu-item .fn-name {
+    font-weight: 700;
+    color: var(--blue-dark);
+    display: block;
+    margin-bottom: 2px;
+  }
+  .menu-item .fn-desc { color: var(--grey); font-size: 11px; }
+
+  /* ── Naming format box ── */
+  .name-format {
+    background: var(--blue-dark);
+    color: #e8f0fe;
+    font-family: 'Courier New', monospace;
+    font-size: 10.5px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    margin: 8px 0;
+    line-height: 1.8;
+    word-break: break-all;
+  }
+  .name-format .seg { color: #fdd663; }
+  .name-format .sep { color: #aaa; }
+
+  /* ── Codes table ── */
+  .codes-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .codes-table th {
+    background: var(--blue);
+    color: #fff;
+    padding: 4px 7px;
+    text-align: left;
+    font-size: 10px;
+    text-transform: uppercase;
+  }
+  .codes-table td {
+    padding: 4px 7px;
+    border-bottom: 1px solid var(--border);
+  }
+  .codes-table tr:nth-child(even) td { background: var(--grey-light); }
+  .code-pill {
+    display: inline-block;
+    background: var(--blue-light);
+    color: var(--blue-dark);
+    font-weight: 700;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+  }
+
+  /* ── Settings box ── */
+  .setting-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11.5px;
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-cell {
+    font-weight: 700;
+    color: var(--blue-dark);
+    font-family: monospace;
+    font-size: 11px;
+    white-space: nowrap;
+    min-width: 36px;
+  }
+
+  /* ── Info box ── */
+  .info-box {
+    background: var(--blue-light);
+    border: 1px solid var(--blue-mid);
+    border-left: 3px solid var(--blue);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-size: 11.5px;
+    margin: 8px 0;
+  }
+  .warn-box {
+    background: var(--red-light);
+    border: 1px solid #f5c6c2;
+    border-left: 3px solid var(--red);
+    border-radius: var(--radius);
+    padding: 8px 10px;
+    font-size: 11.5px;
+    margin: 8px 0;
+  }
+  .warn-box strong { color: var(--red); }
+
+  /* ── Inline code ── */
+  code {
+    background: #f1f3f4;
+    border: 1px solid #dadce0;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 10.5px;
+    padding: 0 4px;
+    color: var(--blue-dark);
+  }
+
+  /* ── Live codes spinner ── */
+  .loading {
+    text-align: center;
+    color: var(--grey);
+    font-size: 11px;
+    padding: 12px 0;
+    font-style: italic;
+  }
+  .loading::before { content: '⟳ '; }
+
+  /* ── Footer ── */
+  .footer {
+    background: var(--blue-dark);
+    color: rgba(255,255,255,.65);
+    text-align: center;
+    font-size: 10px;
+    padding: 8px 12px;
+    letter-spacing: .3px;
+  }
+
+  ul {
+    margin: 4px 0 6px 16px;
+    font-size: 11.5px;
+  }
+  ul li { margin-bottom: 3px; }
+
+  ol {
+    margin: 4px 0 6px 18px;
+    font-size: 11.5px;
+  }
+  ol li { margin-bottom: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     HEADER
+══════════════════════════════════════ -->
+<div class="header">
+  <div class="header-top">
+    <? if (logoBase64) { ?>
+      <img class="header-logo" src="data:image/png;base64,<?= logoBase64 ?>" alt="KAL Logo">
+    <? } else { ?>
+      <div class="header-logo-placeholder">📁</div>
+    <? } ?>
+    <div class="header-title">
+      <h1>KAL File Registry</h1>
+      <p>Smart File Management System</p>
+    </div>
+  </div>
+
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+    <button class="tab-btn" onclick="showTab('columns')">Columns</button>
+    <button class="tab-btn" onclick="showTab('menus')">Menus</button>
+    <button class="tab-btn" onclick="showTab('codes')">Codes</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     TAB 1 – OVERVIEW
+══════════════════════════════════════ -->
+<div id="tab-overview" class="tab-panel active content">
+
+  <!-- What is it? -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>📋 What is the KAL Registry?</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>The <strong>KAL Smart File Registry</strong> is a Google Sheets-based document control system that tracks every KAL Academy file across Google Drive.</p>
+      <p>It enforces a strict naming convention, validates each file against Drive, assigns visual audit status, and automates file creation, archiving, linking, and reporting — all from a single spreadsheet menu.</p>
+      <div class="info-box">
+        <strong>Sheets used:</strong> <code>Registry</code> (main data) · <code>CODES &amp; Descriptions</code> (validation) · <code>Settings</code> (config) · <code>Temp</code> (scratch)
+      </div>
+    </div>
+  </div>
+
+  <!-- Getting started -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🚀 Quick Start</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <ol>
+        <li>Open the <strong>Registry</strong> tab — each row is one file.</li>
+        <li>Fill in <strong>col B</strong> (Description) and <strong>col C</strong> (KAL File Name).</li>
+        <li>Choose <strong>col D</strong> (File Type) from the drop-down.</li>
+        <li>Set <strong>col E</strong> (Version) e.g. <code>v1</code>, <code>v2</code>, <code>vFINAL</code>.</li>
+        <li>Run <em>KAL Registry › Audit All Rows</em> to validate the sheet.</li>
+        <li>Fix any <span style="color:var(--red);font-weight:700;">red-highlighted</span> rows shown by the audit.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Priority color model -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🎨 Row Status Colors</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>After running an audit, each row is colored to show its status:</p>
+
+      <div class="status-row red-row">
+        <div class="dot dot-red"></div>
+        <div>
+          <strong>Red — Naming Error (Priority 1)</strong><br>
+          <span style="font-size:11px;">The file name fails structural or code validation. The Kiji Check column (I) shows the exact error(s), e.g. <em>Invalid Drive Code (XX)</em>.</span>
+        </div>
+      </div>
+
+      <div class="status-row yellow-row">
+        <div class="dot dot-yellow"></div>
+        <div>
+          <strong>Yellow — File Not Found (Priority 2)</strong><br>
+          <span style="font-size:11px;">Name is valid but no matching file was found in Google Drive. Create the file or repair the link.</span>
+        </div>
+      </div>
+
+      <div class="status-row green-row">
+        <div class="dot dot-green"></div>
+        <div>
+          <strong>Green — Finalized (Priority 3)</strong><br>
+          <span style="font-size:11px;">Name is valid, file exists in Drive, and version is <code>vFINAL</code>.</span>
+        </div>
+      </div>
+
+      <div class="status-row none-row">
+        <div class="dot dot-none"></div>
+        <div>
+          <strong>No color — In Progress</strong><br>
+          <span style="font-size:11px;">Name is valid and file exists, but not yet finalized.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings tab -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>⚙️ Settings Tab Requirements</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>The <strong>Settings</strong> sheet must have these cells configured before using advanced features:</p>
+      <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-top:6px;">
+        <div class="setting-row">
+          <span class="setting-cell">A2</span>
+          <span>Default Destination Drive folder URL (used by <em>Move to Destination Drive</em>)</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-cell">B2</span>
+          <span>Preferred KAL Template folder URL (used by <em>Create Selected File</em>)</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-cell">C2</span>
+          <span>Archive folder URL (used by <em>Archive Older Versions</em> and <em>Promote to Final</em>)</span>
+        </div>
+      </div>
+      <div class="warn-box" style="margin-top:8px;">
+        <strong>Required:</strong> Paste the full Google Drive folder URL (not just the ID) into each cell. Functions will throw an error if the cell is empty.
+      </div>
+    </div>
+  </div>
+
+  <!-- Naming convention -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>📐 KAL Naming Convention</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="name-format">
+<span class="seg">[DRIVE]</span><span class="sep">-</span><span class="seg">[ENTITY]</span><span class="sep">_</span><span class="seg">[DOCTYPE]</span><span class="sep">_</span><span class="seg">[Description]</span><span class="sep">_</span><span class="seg">[YYYYMMDD]</span><span class="sep">_</span><span class="seg">v[N]</span>
+      </div>
+
+      <table class="col-table">
+        <tr>
+          <th>Segment</th>
+          <th>Rules</th>
+          <th>Example</th>
+        </tr>
+        <tr>
+          <td class="col-letter">DRIVE</td>
+          <td>2–3 char code from CODES tab</td>
+          <td><code>OP</code>, <code>LP</code>, <code>PC</code></td>
+        </tr>
+        <tr>
+          <td class="col-letter">ENTITY</td>
+          <td>Org unit code from CODES tab</td>
+          <td><code>KAL</code>, <code>STU</code></td>
+        </tr>
+        <tr>
+          <td class="col-letter">DOCTYPE</td>
+          <td>Document type from CODES tab</td>
+          <td><code>POL</code>, <code>RPT</code>, <code>FRM</code></td>
+        </tr>
+        <tr>
+          <td class="col-letter">Description</td>
+          <td>CamelCase, no spaces</td>
+          <td><code>OnboardingGuide</code></td>
+        </tr>
+        <tr>
+          <td class="col-letter">Date</td>
+          <td>YYYYMMDD (optional)</td>
+          <td><code>20240315</code></td>
+        </tr>
+        <tr>
+          <td class="col-letter">Version</td>
+          <td>v1, v2 … vFINAL</td>
+          <td><code>v3</code>, <code>vFINAL</code></td>
+        </tr>
+      </table>
+
+      <p><strong>Full example:</strong></p>
+      <div class="name-format" style="font-size:10px;">OP-KAL_POL_DataPrivacyPolicy_20240315_vFINAL</div>
+
+      <div class="info-box">
+        <strong>Separator rules:</strong> Use <code>-</code> (hyphen) after the Drive code, <code>_</code> (underscore) between all other segments. No spaces anywhere.
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-overview -->
+
+<!-- ══════════════════════════════════════
+     TAB 2 – COLUMNS
+══════════════════════════════════════ -->
+<div id="tab-columns" class="tab-panel content">
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>📊 Registry Column Reference</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>The <strong>Registry</strong> sheet has 13 columns (A–M). Columns shown in <span class="badge badge-blue">AUTO</span> are script-managed; <span class="badge badge-grey">MANUAL</span> are user-entered.</p>
+
+      <table class="col-table" style="margin-top:8px;">
+        <tr>
+          <th>Col</th>
+          <th>Field</th>
+          <th>Notes</th>
+        </tr>
+        <tr>
+          <td class="col-letter">A</td>
+          <td><span class="badge badge-blue">AUTO</span><br>Row #</td>
+          <td>Sequential row number; updated by audit.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">B</td>
+          <td><span class="badge badge-grey">MANUAL</span><br>Description</td>
+          <td>Human-readable name for the file. Used in Abstract formula.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">C</td>
+          <td><span class="badge badge-grey">MANUAL</span><br>KAL File Name</td>
+          <td>Full KAL-format name without extension. Validated on audit.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">D</td>
+          <td><span class="badge badge-grey">MANUAL</span><br>File Type</td>
+          <td>Drop-down: <code>Google Doc</code>, <code>Google Sheet</code>, <code>PDF</code>, etc.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">E</td>
+          <td><span class="badge badge-blue">AUTO</span><br>Current Version</td>
+          <td>Extracted from file name (e.g. <code>v2</code>, <code>vFINAL</code>).</td>
+        </tr>
+        <tr>
+          <td class="col-letter">F</td>
+          <td><span class="badge badge-blue">AUTO</span><br>Current Folder</td>
+          <td>Drive folder name where file currently lives.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">G</td>
+          <td><span class="badge badge-blue">AUTO</span><br>Link</td>
+          <td>Clickable hyperlink to the file in Google Drive. Shows <code>Not Found</code> if missing.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">H</td>
+          <td><span class="badge badge-grey">MANUAL</span><br>For Who</td>
+          <td>Audience tag (staff, student, public, etc.).</td>
+        </tr>
+        <tr>
+          <td class="col-letter">I</td>
+          <td><span class="badge badge-blue">AUTO</span><br>KAL Name Check</td>
+          <td>Audit result. Blank = pass. Error text = fail (row goes red).</td>
+        </tr>
+        <tr>
+          <td class="col-letter">J</td>
+          <td><span class="badge badge-grey">MANUAL</span><br>Destination Drive</td>
+          <td>Target folder URL for <em>Move to Destination</em>. Overrides Settings!A2.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">K</td>
+          <td><span class="badge badge-grey">MANUAL</span><br>Preferred Template</td>
+          <td>Template ID or name used by <em>Create Selected File</em>.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">L</td>
+          <td><span class="badge badge-blue">AUTO</span><br>Abstract</td>
+          <td>AI-generated two-sentence summary using the <code>=AI()</code> formula.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">M</td>
+          <td><span class="badge badge-grey">MANUAL</span><br>Owner Email</td>
+          <td>Email address for <em>Notify Owner</em> function. Optional.</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🤖 Abstract Column (L)</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>Column L is auto-populated with an <code>=AI()</code> formula whenever a valid file name exists in col C:</p>
+      <div class="name-format" style="font-size:10px; word-break:break-word;">
+=AI("Based ONLY on description '"&amp;B2&amp;"' and filename '"&amp;C2&amp;"', write a two-sentence summary.")
+      </div>
+      <p>The formula uses the <strong>Gemini AI extension</strong> built into Google Sheets. If the cell shows an error, ensure the AI extension is installed and enabled for your account.</p>
+      <div class="info-box">
+        The Abstract is the <strong>rightmost data column</strong> intentionally — it can be hidden during data entry without losing any registry data.
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-columns -->
+
+<!-- ══════════════════════════════════════
+     TAB 3 – MENUS
+══════════════════════════════════════ -->
+<div id="tab-menus" class="tab-panel content">
+
+  <!-- File Operations -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>📁 File Operations</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+
+      <div class="menu-item blue">
+        <span class="fn-name">Create Selected File</span>
+        <span class="fn-desc">Creates a new Google file in Drive for the selected row using the name in col C. Optionally copies from the template specified in col K or Settings!B2. Inserts the Drive link into col G.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Open Current Folder</span>
+        <span class="fn-desc">Opens the Drive folder listed in col F for the selected row in a new browser tab.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Move to Destination Drive</span>
+        <span class="fn-desc">Moves the selected file from its current location to the URL in col J (or Settings!A2 if col J is empty). Updates col F and col G automatically.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Promote to Final &amp; Move</span>
+        <span class="fn-desc">Renames the file to <code>vFINAL</code>, moves it to the Destination Drive, and archives the previous versioned copy to the archive folder (Settings!C2). Triggers a full row re-audit.</span>
+      </div>
+
+      <div class="menu-item red">
+        <span class="fn-name">Remove Selected File</span>
+        <span class="fn-desc">Permanently deletes the Drive file linked in col G for the active row. Clears col G. Prompts for confirmation before deletion.</span>
+      </div>
+
+      <div class="menu-item red">
+        <span class="fn-name">Remove All Versions</span>
+        <span class="fn-desc">Deletes all Drive files whose name matches the base name in col C (all version suffixes). Clears all matching links. Use with caution.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Maintenance -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🔧 Maintenance</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+
+      <div class="menu-item blue">
+        <span class="fn-name">Keep Only Latest Version</span>
+        <span class="fn-desc">Scans Drive for all versions of each registered file. Keeps only the highest version number; trashes older copies. Updates links accordingly.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Archive Older Versions</span>
+        <span class="fn-desc">Moves all non-latest versions to the archive folder defined in Settings!C2 instead of deleting them. Useful for audit trails.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Repair Broken Links</span>
+        <span class="fn-desc">Re-searches Drive for every row where col G shows <code>Not Found</code> or contains a stale URL, and repairs any that can be matched by exact file name.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Clear All Diagnostics</span>
+        <span class="fn-desc">Wipes col I (KAL Name Check) and removes all row background colors, resetting the sheet to a clean, unaudited state.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reports & View -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>📊 Reports &amp; View</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+
+      <div class="menu-item green">
+        <span class="fn-name">Generate Health Report</span>
+        <span class="fn-desc">Opens a modal dialog summarizing the registry: total rows, red/yellow/green counts, missing files, finalized %, and a list of all error rows by row number.</span>
+      </div>
+
+      <div class="menu-item green">
+        <span class="fn-name">Export Registry to PDF</span>
+        <span class="fn-desc">Uses the Google Sheets export API to download the Registry sheet as a formatted PDF. The file is saved to your Drive root with the current date in the name.</span>
+      </div>
+
+      <div class="menu-item green">
+        <span class="fn-name">Toggle Compact View</span>
+        <span class="fn-desc">Shows/hides columns D (Type), H (For Who), J (Destination), and L (Abstract) to reduce horizontal scrolling during data entry.</span>
+      </div>
+
+      <div class="menu-item green">
+        <span class="fn-name">Toggle Done Rows</span>
+        <span class="fn-desc">Shows/hides all green (vFINAL) rows so you can focus on files still in progress.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top-level -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>⚡ Top-Level Actions</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+
+      <div class="menu-item blue">
+        <span class="fn-name">Audit All Rows</span>
+        <span class="fn-desc">Validates every row in the Registry: checks naming convention, Drive code, entity, doc type, searches Drive for each file, updates col E (version), col F (folder), col G (link), col I (errors), and applies status colors. Runs as a single batch for performance.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Audit Selected Row</span>
+        <span class="fn-desc">Same as above but only for the row where your cursor is. Much faster for a quick single-row check.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Search Missing KAL Files</span>
+        <span class="fn-desc">Scans Google Drive for files whose names start with a registered Drive prefix (OP-, LP-, PC-, etc.) that are <em>not</em> in the Registry. Found files are inserted below their relevant section in the correct sorted position. Drive codes are read dynamically from the CODES tab.</span>
+      </div>
+
+      <div class="menu-item blue">
+        <span class="fn-name">Notify Owner</span>
+        <span class="fn-desc">Sends an email to the address in col M (Owner Email) for the selected row, with a summary of the row's current audit status and a link to the file. Requires Gmail send permission.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Show Codes submenu -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🏷️ Show Codes Submenu</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="menu-item blue">
+        <span class="fn-name">Show Drive Codes</span>
+        <span class="fn-desc">Pops a dialog listing all valid Drive prefix codes (e.g. OP, LP, PC) with their descriptions, read live from the CODES &amp; Descriptions tab.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">Show Entity Codes</span>
+        <span class="fn-desc">Pops a dialog listing all valid Entity codes with descriptions (e.g. KAL = Kal Academy, STU = Student).</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">Show Doc Type Codes</span>
+        <span class="fn-desc">Pops a dialog listing all valid Document Type codes (e.g. POL = Policy, RPT = Report, FRM = Form).</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-menus -->
+
+<!-- ══════════════════════════════════════
+     TAB 4 – CODES (live)
+══════════════════════════════════════ -->
+<div id="tab-codes" class="tab-panel content">
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🚗 Drive Codes</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p style="font-size:11px;color:var(--grey);margin-bottom:8px;">Prefix for the file name. Identifies which Drive the file belongs to.</p>
+      <div id="drives-content"><div class="loading">Loading from sheet…</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🏢 Entity Codes</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p style="font-size:11px;color:var(--grey);margin-bottom:8px;">Identifies the organisational unit responsible for the file.</p>
+      <div id="entities-content"><div class="loading">Loading from sheet…</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>📄 Document Type Codes</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p style="font-size:11px;color:var(--grey);margin-bottom:8px;">The category or purpose of the document.</p>
+      <div id="doctypes-content"><div class="loading">Loading from sheet…</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>✏️ CamelCase Examples</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p style="font-size:11px;color:var(--grey);margin-bottom:8px;">Use CamelCase (no spaces) for the description segment of the file name.</p>
+      <div id="camel-content"><div class="loading">Loading from sheet…</div></div>
+    </div>
+  </div>
+
+</div><!-- /tab-codes -->
+
+<!-- ══════════════════════════════════════
+     FOOTER
+══════════════════════════════════════ -->
+<div class="footer">
+  KAL Academy · Smart File Registry · v2.0
+</div>
+
+<!-- ══════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════ -->
+<script>
+  /* ── Tab switching ── */
+  function showTab(id) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    event.currentTarget.classList.add('active');
+    if (id === 'codes' && !window._codesLoaded) loadCodes();
+  }
+
+  /* ── Collapsible sections ── */
+  function toggleSection(head) {
+    const body = head.nextElementSibling;
+    const collapsed = head.classList.toggle('collapsed');
+    body.style.display = collapsed ? 'none' : 'block';
+  }
+
+  /* ── Live codes from sheet ── */
+  var _codesLoaded = false;
+
+  function loadCodes() {
+    _codesLoaded = true;
+    google.script.run
+      .withSuccessHandler(renderCodes)
+      .withFailureHandler(function(e) {
+        ['drives','entities','doctypes','camel'].forEach(function(k) {
+          document.getElementById(k + '-content').innerHTML =
+            '<div style="color:var(--red);font-size:11px;padding:6px;">Could not load: ' + e.message + '</div>';
+        });
+      })
+      .getAcademyCodes();
+  }
+
+  function renderCodes(data) {
+    renderCodeTable('drives-content',   data.drives,    'Code', 'Drive');
+    renderCodeTable('entities-content', data.entities,  'Code', 'Entity');
+    renderCodeTable('doctypes-content', data.docTypes,  'Code', 'Document Type');
+    renderCamelList('camel-content',    data.camelCases);
+  }
+
+  function renderCodeTable(containerId, rows, col1, col2) {
+    if (!rows || rows.length === 0) {
+      document.getElementById(containerId).innerHTML =
+        '<p style="color:var(--grey);font-size:11px;font-style:italic;">No codes found.</p>';
+      return;
+    }
+    var html = '<table class="codes-table"><tr><th>' + col1 + '</th><th>' + col2 + '</th></tr>';
+    rows.forEach(function(r) {
+      html += '<tr><td><span class="code-pill">' + escHtml(r[0]) + '</span></td>'
+            + '<td>' + escHtml(r[1] || '') + '</td></tr>';
+    });
+    html += '</table>';
+    document.getElementById(containerId).innerHTML = html;
+  }
+
+  function renderCamelList(containerId, items) {
+    if (!items || items.length === 0) {
+      document.getElementById(containerId).innerHTML =
+        '<p style="color:var(--grey);font-size:11px;font-style:italic;">No examples found.</p>';
+      return;
+    }
+    var html = '<ul style="margin-left:14px;">';
+    items.forEach(function(item) {
+      html += '<li><code>' + escHtml(item) + '</code></li>';
+    });
+    html += '</ul>';
+    document.getElementById(containerId).innerHTML = html;
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
