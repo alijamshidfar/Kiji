@@ -441,9 +441,14 @@
         img.alt='KAL Logo';
         img.onload=function(){
           var el=document.getElementById('logo-el');
-          el.className='header-logo-placeholder';
-          el.style.background='transparent';
-          el.style.padding='0';
+          /* The logo PNG has large whitespace; bird is at ~78% x, ~20% y.
+             Scale the image 3.5× inside a clipped container and offset
+             so the bird is centred in the 48×48 box. */
+          el.className='';
+          el.style.cssText='width:48px;height:48px;border-radius:6px;'
+            +'background:#fff;overflow:hidden;position:relative;flex-shrink:0;';
+          img.style.cssText='position:absolute;width:168px;height:168px;'
+            +'left:-107px;top:-10px;object-fit:contain;';
           el.innerHTML='';
           el.appendChild(img);
         };
