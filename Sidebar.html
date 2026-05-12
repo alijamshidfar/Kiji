@@ -434,21 +434,40 @@
       (function(){
         var raw='<?= logoBase64 ?>';
         if(!raw||raw.length<100)return;
-        /* Accept both plain base64 and full data-URI strings */
-        var src=raw.indexOf('base64,')!==-1?raw:'data:image/png;base64,'+raw;
+
+        /* Resolve to a full data-URI and detect format */
+        var src,isSvg=false;
+        if(raw.indexOf('data:')===0){
+          src=raw;
+          isSvg=raw.indexOf('svg')!==-1;
+        }else{
+          var mime='image/png';
+          /* SVG base64 starts with PHN2 (<svg) or PD94 (<?xml) */
+          if(raw[0]==='/')      mime='image/jpeg';
+          else if(raw.substring(0,4)==='PHN2'||raw.substring(0,4)==='PD94'){
+            mime='image/svg+xml'; isSvg=true;
+          }
+          src='data:'+mime+';base64,'+raw;
+        }
+
         var img=new Image();
-        img.className='header-logo';
         img.alt='KAL Logo';
         img.onload=function(){
           var el=document.getElementById('logo-el');
-          /* The logo PNG has large whitespace; bird is at ~78% x, ~20% y.
-             Scale the image 3.5× inside a clipped container and offset
-             so the bird is centred in the 48×48 box. */
           el.className='';
-          el.style.cssText='width:48px;height:48px;border-radius:6px;'
-            +'background:#fff;overflow:hidden;position:relative;flex-shrink:0;';
-          img.style.cssText='position:absolute;width:168px;height:168px;'
-            +'left:-107px;top:-10px;object-fit:contain;';
+          if(isSvg){
+            /* SVG has a tight viewBox — no clipping tricks needed */
+            el.style.cssText='width:48px;height:48px;border-radius:6px;'
+              +'background:#fff;flex-shrink:0;overflow:hidden;';
+            img.style.cssText='width:48px;height:48px;object-fit:contain;';
+          }else{
+            /* PNG: bird is at ~78% x, ~20% y of a large white canvas.
+               Scale 3.5× inside a clipped box and offset to centre the bird. */
+            el.style.cssText='width:48px;height:48px;border-radius:6px;'
+              +'background:#fff;overflow:hidden;position:relative;flex-shrink:0;';
+            img.style.cssText='position:absolute;width:168px;height:168px;'
+              +'left:-107px;top:-10px;object-fit:contain;';
+          }
           el.innerHTML='';
           el.appendChild(img);
         };
