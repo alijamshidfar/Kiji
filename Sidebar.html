@@ -428,12 +428,11 @@
 ══════════════════════════════════════ -->
 <div class="header">
   <div class="header-top">
-    <!-- Logo value stored in DOM — avoids all JS string-escaping issues -->
     <div id="logo-el" class="header-logo-placeholder">📁</div>
-    <div id="logo-b64" style="display:none"><?= logoBase64 ?></div>
     <script>
-      (function(){
-        var raw=(document.getElementById('logo-b64').textContent||'').trim();
+      /* Logo loaded asynchronously — keeps template evaluation simple */
+      google.script.run.withSuccessHandler(applyLogo).getLogoBase64();
+      function applyLogo(raw){
         if(!raw||raw.length<100)return;
 
         /* Resolve to a full data-URI and detect format */
@@ -473,7 +472,7 @@
           el.appendChild(img);
         };
         img.src=src;
-      })();
+      }
     </script>
     <div class="header-title">
       <h1>KAL File Registry</h1>
