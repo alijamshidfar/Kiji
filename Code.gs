@@ -728,6 +728,11 @@ function keepOnlyLatestVersion() {
     }
   } catch (e) { toast('Drive search error: ' + e.message, '❌ Error', 5); return; }
 
+  if (allFiles.length <= 1) {
+    toast('Only one version found — nothing to remove.', '🧹 Info', 4);
+    return;
+  }
+
   let trashed = 0;
   allFiles.forEach(({ file, vNum }) => {
     if (vNum < latestNum) {
@@ -769,6 +774,11 @@ function archiveOlderVersions() {
       if (vNum > latestNum) latestNum = vNum;
     }
   } catch (e) { toast('Drive search error: ' + e.message, '❌ Error', 5); return; }
+
+  if (allFiles.length <= 1) {
+    toast('Only one version found — nothing older to archive.', '📦 Info', 4);
+    return;
+  }
 
   const archiveFolder = DriveApp.getFolderById(archiveId);
   let archived = 0;
