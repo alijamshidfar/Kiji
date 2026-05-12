@@ -233,7 +233,10 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   else if (info.version  === 'FINAL')    color = COLOR.GREEN;   // 🟢 finalized
   else                                   color = COLOR.NONE;
 
-  if (applyBg) sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(color);
+  if (applyBg) {
+    sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(color);
+    sheet.getRange(r, COL.ROW_NUM).setValue(r - 1);
+  }
   return color;
 }
 
