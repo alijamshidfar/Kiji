@@ -432,7 +432,7 @@
     <div id="logo-el" class="header-logo-placeholder">📁</div>
     <script>
       (function(){
-        var raw='<?= logoBase64 ?>';
+        var raw=<?!= JSON.stringify(logoBase64) ?>;
         if(!raw||raw.length<100)return;
 
         /* Resolve to a full data-URI and detect format */
