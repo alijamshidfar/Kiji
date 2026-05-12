@@ -5,7 +5,6 @@
  */
 
 // ── Column indices (1-based) ──────────────────────────────────────────────────
-// Keep in sync with the Docs sheet layout.
 const COL = Object.freeze({
   ROW_NUM:    1,   // A
   DESC:       2,   // B
@@ -18,13 +17,31 @@ const COL = Object.freeze({
   KAL_CHECK:  9,   // I
   DEST_DRIVE: 10,  // J
   TEMPLATE:   11,  // K
-  ABSTRACT:   12   // L
+  ABSTRACT:   12,  // L
+  OWNER:      13   // M — email address for notifications (optional)
 });
 
-const LAST_COL   = COL.ABSTRACT; // rightmost data column index
+const LAST_COL   = COL.ABSTRACT; // rightmost formatted/data column (L)
 const DATA_START = 2;            // row 1 = header; data rows begin here
 
+// ── Sheet names ───────────────────────────────────────────────────────────────
+const SHEET = Object.freeze({
+  REGISTRY: 'Registry',          // main file list  (was "Docs")
+  CODES:    'CODES & Descriptions', // validation data (was "Levels")
+  SETTINGS: 'Settings',
+  TEMP:     'Temp'
+});
+
+// ── Row highlight colours (priority model) ────────────────────────────────────
+const COLOR = Object.freeze({
+  RED:    '#f4cccc',  // 🔴 Priority 1 – structural / naming error
+  YELLOW: '#fff2cc',  // 🟡 Priority 2 – valid name, file missing in Drive
+  GREEN:  '#d9ead3',  // 🟢 Priority 3 – finalized (vFINAL)
+  ERROR:  '#fff2cc',  // amber – script error during batch (same as yellow)
+  NONE:   null        // no highlight
+});
+
 // ── KAL logo (Base64-encoded PNG) ────────────────────────────────────────────
-// Paste the full base64 string between the quotes below.
-// Used by showUserGuide() to render the logo in the sidebar.
+// Paste the full base64 string between the quotes.
+// Used by showUserGuide() to embed the logo in the sidebar.
 const KAL_LOGO_BASE64 = '';
