@@ -639,15 +639,28 @@ function promoteToFinalAndMove() {
   if (response !== ui.Button.YES) return;
 
   try {
-    const srcFile   = DriveApp.getFileById(getIdFromUrl(info.fileLink));
-    const dateStr   = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
+    const srcFile = DriveApp.getFileById(getIdFromUrl(info.fileLink));
+    const dateStr = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
     const finalName = baseName + '_' + dateStr + '_vFINAL';
-    const parents   = srcFile.getParents();
-    const destFolder = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
-    srcFile.makeCopy(finalName, destFolder);
+
+    // Resolve destination: col J formula → col J rich-text → Settings!A2
+    let destUrl = null;
+    try {
+      const formula = sheet.getRange(r, COL.DEST_DRIVE).getFormula();
+      const m = formula.match(/=HYPERLINK\(\s*"([^"]+)"/i);
+      if (m) destUrl = m[1];
+    } catch (_) {}
+    if (!destUrl) {
+      try { destUrl = sheet.getRange(r, COL.DEST_DRIVE).getRichTextValue().getLinkUrl(); } catch (_) {}
+    }
+    if (!destUrl) destUrl = getUrlFromCell(SHEET.SETTINGS, 'A2');
+    const destId = getIdFromUrl(destUrl);
+    if (!destId) { toast('No destination folder found in col J or Settings!A2.', '🛑 Error', 5); return; }
+
+    srcFile.makeCopy(finalName, DriveApp.getFolderById(destId));
     srcFile.moveTo(DriveApp.getFolderById(archiveId));
     updateSelectedInfo();
-    toast('"' + finalName + '" created. Original archived.', '🏁 Promoted', 6);
+    toast('"' + finalName + '" created in destination drive. Original archived.', '🏁 Promoted', 6);
   } catch (e) { toast('Promote failed: ' + e.message, '❌ Error', 6); console.error('promoteToFinalAndMove: ' + e.message); }
 }
 
