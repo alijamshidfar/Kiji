@@ -428,11 +428,12 @@
 ══════════════════════════════════════ -->
 <div class="header">
   <div class="header-top">
-    <!-- Placeholder shown by default; JS swaps in real image only on successful load -->
+    <!-- Logo value stored in DOM — avoids all JS string-escaping issues -->
     <div id="logo-el" class="header-logo-placeholder">📁</div>
+    <div id="logo-b64" style="display:none"><?= logoBase64 ?></div>
     <script>
       (function(){
-        var raw=<?!= JSON.stringify(logoBase64) ?>;
+        var raw=(document.getElementById('logo-b64').textContent||'').trim();
         if(!raw||raw.length<100)return;
 
         /* Resolve to a full data-URI and detect format */
