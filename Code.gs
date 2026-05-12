@@ -527,8 +527,7 @@ function createSelectedFile() {
   const r     = sheet.getActiveRange().getRow();
   if (r < DATA_START) return;
 
-  const baseName     = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
-  const templateName = sheet.getRange(r, COL.TEMPLATE).getValue().toString().trim();
+  const baseName = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
   if (!baseName) { toast('No filename found in this row.', '🛑 Error', 5); return; }
 
   let data, templateList;
@@ -537,17 +536,39 @@ function createSelectedFile() {
 
   processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList);
   const nameStatus = sheet.getRange(r, COL.KAL_CHECK).getValue().toString().trim();
-
   if (nameStatus !== 'OK') { toast('Name issues: ' + nameStatus, '🛑 Cannot Create', 6); return; }
+
+  const dateStr = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
+  const info    = GET_SMART_DETAILS(baseName);
+
+  // ── File already exists: copy it as the next version ──────────────────────
+  if (info.fileLink !== 'Not Found') {
+    if (info.version === 'FINAL') {
+      toast('File is already vFINAL — use Promote to vFINAL & Move instead.', 'ℹ️ Info', 5);
+      return;
+    }
+    const nextVer   = (parseInt(info.version, 10) || 1) + 1;
+    const newName   = baseName + '_' + dateStr + '_v' + nextVer;
+    try {
+      const srcFile = DriveApp.getFileById(getIdFromUrl(info.fileLink));
+      const parents = srcFile.getParents();
+      const folder  = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+      srcFile.makeCopy(newName, folder);
+      updateSelectedInfo();
+      toast('"' + newName + '" created as new version.', '✅ New Version', 5);
+    } catch (e) { toast('Copy failed: ' + e.message, '❌ Error', 6); }
+    return;
+  }
+
+  // ── File does not exist: create from template ──────────────────────────────
+  const templateName = sheet.getRange(r, COL.TEMPLATE).getValue().toString().trim();
   if (!templateName) { toast('Select a template from the dropdown (col K) first.', '🛑 Missing Template', 5); return; }
-  if (GET_SMART_DETAILS(baseName).fileLink !== 'Not Found') { toast('File already exists in Drive.', '🛑 Duplicate', 5); return; }
 
   try {
     const destId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'A2'));
     if (!destId) throw new Error('Destination folder URL missing in Settings!A2.');
     const tempFolderId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'B2'));
     if (!tempFolderId) throw new Error('Template folder URL missing in Settings!B2.');
-    const dateStr       = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
     const finalFileName = baseName + '_' + dateStr + '_v1';
     const templateFiles = DriveApp.getFolderById(tempFolderId).getFilesByName(templateName);
     if (!templateFiles.hasNext()) { toast('"' + templateName + '" not found in templates folder.', '🛑 Error', 5); return; }
