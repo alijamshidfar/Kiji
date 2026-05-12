@@ -41,6 +41,13 @@ const COLOR = Object.freeze({
   NONE:   null        // no highlight
 });
 
+// ── Header styling ───────────────────────────────────────────────────────────
+const HEADER_BLUE = '#1a56db';  // vivid royal blue matching the sheet header
+
+// Drive-code prefix order for rebuildRegistryFromDrive()
+// Edit this array to change the grouping order. Unknown codes follow, sorted.
+const REBUILD_PREFIX_ORDER = ['OP', 'KAL', 'PC'];
+
 // ── KAL logo (Base64-encoded PNG) ────────────────────────────────────────────
 // Paste the full base64 string between the quotes.
 // Used by showUserGuide() to embed the logo in the sidebar.

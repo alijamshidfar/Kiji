@@ -38,6 +38,8 @@ function onOpen() {
 
     // ── Maintenance sub-menu ────────────────────────────────────────────────
     .addSubMenu(ui.createMenu('🧹 Maintenance')
+      .addItem('🔁 Rebuild Registry from Drive', 'rebuildRegistryFromDrive')
+      .addSeparator()
       .addItem('🧹 Keep Only Latest Version', 'keepOnlyLatestVersion')
       .addItem('📦 Archive Older Versions',   'archiveOlderVersions')
       .addItem('🛠️ Repair Broken Links',      'repairBrokenLinks')
@@ -1130,4 +1132,220 @@ function getAcademyCodes() {
     console.error('getAcademyCodes: ' + e.message);
     return EMPTY;
   }
+}
+
+// ── Registry Rebuild from Drive ───────────────────────────────────────────────
+
+/**
+ * Rebuilds the registry by scanning Google Drive for KAL-convention files.
+ *
+ * Groups files by drive-code prefix in REBUILD_PREFIX_ORDER (OP, KAL, PC …),
+ * then any other prefixes found, sorted alphabetically.
+ * Between groups: 3 blank rows + 1 full blue separator row.
+ * Last row is also a blue separator.
+ * Row 1 and col A are frozen; header row is formatted to match the sheet design.
+ *
+ * ⚠️  This clears all existing data rows. Confirm before running.
+ */
+function rebuildRegistryFromDrive() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
+  const ui = SpreadsheetApp.getUi();
+  const resp = ui.alert(
+    '🔁 Rebuild Registry from Drive',
+    'This will CLEAR all existing rows and repopulate from Google Drive.\n\nContinue?',
+    ui.ButtonSet.YES_NO
+  );
+  if (resp !== ui.Button.YES) return;
+
+  toast('Scanning Drive — this may take a moment…', '🔍 Rebuilding', 30);
+
+  // 1. Format header row
+  rebuildFormatHeader_(sheet);
+
+  // 2. Clear existing data
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= DATA_START) {
+    sheet.getRange(DATA_START, 1, lastRow - DATA_START + 1, COL.OWNER).clear();
+  }
+
+  // 3. Collect Drive files grouped by drive-code prefix
+  const groups = rebuildCollectGroups_();
+
+  // 4. Render order: defined prefixes first, then others sorted
+  const defined = REBUILD_PREFIX_ORDER.filter(p => groups[p] && groups[p].length);
+  const others  = Object.keys(groups)
+                        .filter(p => !REBUILD_PREFIX_ORDER.includes(p))
+                        .sort();
+  const renderOrder = [...defined, ...others];
+
+  if (!renderOrder.length) {
+    toast('No KAL-convention files found in Drive.', 'ℹ️ Info', 5);
+    return;
+  }
+
+  // 5. Write file rows with separators between groups
+  let r = DATA_START;
+  renderOrder.forEach((prefix, idx) => {
+    if (idx > 0) {
+      r += 3;                     // 3 blank rows
+      rebuildWriteSeparator_(sheet, r);
+      r++;
+    }
+    (groups[prefix] || []).forEach(file => {
+      rebuildWriteFileRow_(sheet, r, file);
+      r++;
+    });
+  });
+
+  // 6. Final blue separator row
+  rebuildWriteSeparator_(sheet, r);
+
+  // 7. Freeze row 1 and col A
+  sheet.setFrozenRows(1);
+  sheet.setFrozenColumns(1);
+
+  renumberAllRows_(sheet);
+
+  const total = renderOrder.reduce((n, p) => n + (groups[p] || []).length, 0);
+  toast('Done — ' + total + ' files across ' + renderOrder.length + ' group(s).', '✅ Rebuilt', 6);
+}
+
+/** Searches Drive for all KAL-convention files; returns {PREFIX: [DriveFile]} map. */
+function rebuildCollectGroups_() {
+  const groups = {};
+  const seen   = new Set();
+  const searchPrefixes = [...new Set([...REBUILD_PREFIX_ORDER, 'LP', 'CA', 'SA', 'RA', 'GA', 'MA'])];
+
+  searchPrefixes.forEach(prefix => {
+    try {
+      const iter = DriveApp.searchFiles(
+        `title contains '${prefix}-' and trashed = false`
+      );
+      while (iter.hasNext()) {
+        const f = iter.next();
+        if (seen.has(f.getId())) continue;
+        const m = f.getName().match(/^([A-Z]{2,4})-/);
+        if (!m) continue;                          // skip non-KAL-pattern files
+        seen.add(f.getId());
+        const key = m[1];
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(f);
+      }
+    } catch (_) {}
+  });
+
+  // Sort each group alphabetically by filename
+  Object.values(groups).forEach(arr =>
+    arr.sort((a, b) => a.getName().localeCompare(b.getName()))
+  );
+  return groups;
+}
+
+/** Writes one Drive file's data into a registry row. */
+function rebuildWriteFileRow_(sheet, r, driveFile) {
+  const name   = driveFile.getName();
+  const url    = driveFile.getUrl();
+  const mime   = driveFile.getMimeType();
+  const par    = driveFile.getParents();
+  const folder = par.hasNext() ? par.next() : null;
+
+  // Parse filename: DRIVECODE-ENTITY_DOCTYPE_NameParts[_YYYYMMDD][_vN|_vFINAL]
+  const parts   = name.split('_');
+  const prefix  = parts[0] || '';               // e.g. "OP-KAL"
+  const docType = parts[1] || '';               // e.g. "POLICY"
+
+  // Human-readable: everything after docType, strip trailing date + version
+  const rawDesc = parts.slice(2).join(' ')
+    .replace(/_?\d{8}$/, '')
+    .replace(/_?v\d+$/i, '')
+    .replace(/_?vFINAL$/i, '')
+    .trim();
+  const humanDesc = rawDesc
+    .replace(/([a-z\d])([A-Z])/g,    '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2')
+    .replace(/([a-zA-Z])(\d)/g,      '$1 $2')
+    .replace(/(\d)([a-zA-Z])/g,      '$1 $2')
+    .trim();
+
+  // Version
+  const verMatch = name.match(/_v(\d+|FINAL)$/i);
+  const version  = verMatch ? verMatch[1] : '1';
+
+  // For Who = entity code: part after '-' in the drive-prefix segment
+  const entMatch = prefix.match(/-(.+)/);
+  const forWho   = entMatch ? entMatch[1] : 'ALL';
+
+  // Folder link
+  const folderName = folder ? folder.getName() : '';
+  const folderUrl  = folder ? folder.getUrl()  : '';
+
+  // Write plain values first
+  sheet.getRange(r, 1, 1, COL.OWNER).setValues([[
+    '',          // A: row number (renumberAllRows_ fills this)
+    humanDesc,   // B: human-readable description
+    name,        // C: filename
+    formatMimeType(mime), // D: file type
+    version,     // E: current version
+    '',          // F: current folder (hyperlink set below)
+    '',          // G: link (hyperlink set below)
+    forWho,      // H: for who
+    '',          // I: KAL name check (filled by Audit & Sync)
+    '',          // J: destination drive
+    '',          // K: preferred template
+    '',          // L: abstract
+    ''           // M: owner
+  ]]);
+
+  // Hyperlinks
+  if (folderUrl) {
+    const safeFolder = folderName.replace(/"/g, "'");
+    sheet.getRange(r, COL.FOLDER)
+         .setFormula(`=HYPERLINK("${folderUrl}","${safeFolder}")`);
+  }
+  sheet.getRange(r, COL.LINK)
+       .setFormula(`=HYPERLINK("${url}","Link")`);
+}
+
+/** Fills a full row with the header blue (blank text — visual separator). */
+function rebuildWriteSeparator_(sheet, r) {
+  sheet.getRange(r, 1, 1, COL.OWNER)
+       .setValues([Array(COL.OWNER).fill('')])
+       .setBackground(HEADER_BLUE);
+}
+
+/**
+ * Applies the exact blue header design to row 1.
+ * Column A retains its background colour; the Kiji logo floating image is unaffected.
+ */
+function rebuildFormatHeader_(sheet) {
+  const headers = [
+    '',                                  // A: logo (floating image — value stays blank)
+    'Human-Readable\nDescription',       // B
+    'File Name',                         // C
+    'File Type',                         // D
+    'Current\nVersion',                  // E
+    'Current\nFolder',                   // F
+    'Link',                              // G
+    'For\nWho',                          // H
+    'KAL\nName Conversion\nCheck',       // I
+    'Destination\nDrive',                // J
+    'Preferred\nKAL Template',           // K
+    'Abstract',                          // L
+    'Owner'                              // M
+  ];
+
+  sheet.getRange(1, 1, 1, headers.length)
+       .setValues([headers])
+       .setBackground(HEADER_BLUE)
+       .setFontColor('#ffffff')
+       .setFontWeight('bold')
+       .setFontSize(10)
+       .setHorizontalAlignment('center')
+       .setVerticalAlignment('middle')
+       .setWrap(true);
+
+  sheet.setRowHeight(1, 60);
 }
