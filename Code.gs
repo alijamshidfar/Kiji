@@ -991,16 +991,13 @@ function notifyOwner() {
 
 function showUserGuide() {
   try {
-    const html = HtmlService.createHtmlOutputFromFile('Sidebar')
-      .setTitle('KAL File System').setWidth(350);
+    const tmpl = HtmlService.createTemplateFromFile('Sidebar');
+    tmpl.logoBase64 = KAL_LOGO_BASE64;
+    const html = tmpl.evaluate().setTitle('').setWidth(350);
     SpreadsheetApp.getUi().showSidebar(html);
   } catch (e) {
     toast('Could not load the User Guide: ' + e.message, '❌ Error', 5);
   }
-}
-
-function getLogoBase64() {
-  return KAL_LOGO_BASE64;
 }
 
 // ── 12. ACADEMY SIDEBAR DATA ──────────────────────────────────────────────────

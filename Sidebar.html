@@ -433,14 +433,12 @@
 ══════════════════════════════════════ -->
 <div class="header">
   <div class="header-top">
+    <div id="logo-b64" style="display:none"><?= logoBase64 ?></div>
     <div id="logo-el" class="header-logo-placeholder">📁</div>
     <script>
-      /* Logo loaded asynchronously — keeps template evaluation simple */
-      google.script.run.withSuccessHandler(applyLogo).getLogoBase64();
-      function applyLogo(raw){
+      (function(){
+        var raw=document.getElementById('logo-b64').textContent.trim();
         if(!raw||raw.length<100)return;
-
-        /* Resolve to a full data-URI and detect format */
         var src,isSvg=false;
         if(raw.indexOf('data:')===0){
           src=raw;
@@ -454,7 +452,6 @@
           }
           src='data:'+mime+';base64,'+raw;
         }
-
         var img=new Image();
         img.alt='KAL Logo';
         img.onload=function(){
@@ -465,8 +462,7 @@
               +'flex-shrink:0;overflow:hidden;';
             img.style.cssText='width:48px;height:48px;object-fit:contain;';
           }else{
-            /* PNG: bird is at ~78% x, ~20% y of a large white canvas.
-               Scale 3.5× inside a clipped box and offset to centre the bird. */
+            /* PNG: bird occupies upper-right of large canvas; zoom+offset to centre it */
             el.style.cssText='width:48px;height:48px;border-radius:6px;'
               +'background:#fff;overflow:hidden;position:relative;flex-shrink:0;';
             img.style.cssText='position:absolute;width:168px;height:168px;'
@@ -476,7 +472,7 @@
           el.appendChild(img);
         };
         img.src=src;
-      }
+      })();
     </script>
     <div class="header-title">
       <h1>KAL File Registry</h1>
@@ -1037,7 +1033,7 @@
         '<p style="color:var(--grey);font-size:11px;font-style:italic;">No examples found.</p>';
       return;
     }
-    var html = '<table class="codes-table"><tr><th style="width:45%">CamelCase</th><th>Description</th></tr>';
+    var html = '<table class="codes-table" style="table-layout:fixed"><tr><th style="width:38%">CamelCase</th><th>Description</th></tr>';
     items.forEach(function(r) {
       var name = escHtml(r.input  || '');
       var desc = escHtml(r.output || '');
@@ -1047,7 +1043,7 @@
         html += '<tr><td colspan="2" style="font-weight:800;color:var(--blue-dark);'
               + 'background:var(--blue-light);padding:5px 7px;">' + title + '</td></tr>';
       } else {
-        html += '<tr><td style="white-space:nowrap"><code>' + name + '</code></td>'
+        html += '<tr><td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><code>' + name + '</code></td>'
               + '<td>' + desc + '</td></tr>';
       }
     });
