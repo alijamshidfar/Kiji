@@ -335,10 +335,19 @@ function searchMissingKALFiles() {
         const r = newRowStart[code] + i;
         try {
           processAuditForRow(sheet, r, levelsData.driveUrlLookup, levelsData.validEntities, levelsData.validDocs, templateList);
-          sheet.getRange(r, COL.ROW_NUM).setValue(r - 1);
         } catch (e) { console.error('searchMissingKALFiles audit row ' + r + ': ' + e.message); }
       }
     }
+  }
+
+  // Renumber every row after insertions shifted positions
+  const finalLastRow = sheet.getLastRow();
+  if (finalLastRow >= DATA_START) {
+    const numAll   = finalLastRow - DATA_START + 1;
+    const allNames = sheet.getRange(DATA_START, COL.FILENAME, numAll, 1).getValues();
+    sheet.getRange(DATA_START, COL.ROW_NUM, numAll, 1).setValues(
+      allNames.map((cell, i) => [cell[0] ? DATA_START + i - 1 : ''])
+    );
   }
 
   let summary = 'Added ' + totalMissing + ' file(s): ';
