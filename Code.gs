@@ -841,16 +841,23 @@ function repairBrokenLinks() {
   toast(repaired > 0 ? 'Repaired ' + repaired + ' link(s).' : 'All links are up to date.', '🛠️ Repair Links', 5);
 }
 
-/** Clears all row highlight colours on data rows (B–L). */
+/** Clears all row highlight colours on data rows (B–L) and renumbers column A. */
 function clearAllDiagnostics() {
   const ss      = SpreadsheetApp.getActiveSpreadsheet();
   const sheet   = ss.getActiveSheet();
   const lastRow = sheet.getLastRow();
   if (lastRow < DATA_START) return;
   const numRows = lastRow - DATA_START + 1;
+
   const nullBgs = Array(numRows).fill(null).map(() => Array(LAST_COL - COL.DESC + 1).fill(null));
   sheet.getRange(DATA_START, COL.DESC, numRows, LAST_COL - COL.DESC + 1).setBackgrounds(nullBgs);
-  toast('All highlights cleared.', '🧼 Diagnostics', 3);
+
+  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, numRows, 1).getValues();
+  sheet.getRange(DATA_START, COL.ROW_NUM, numRows, 1).setValues(
+    fileNames.map((cell, i) => [cell[0] ? DATA_START + i - 1 : ''])
+  );
+
+  toast('All highlights cleared and rows renumbered.', '🧼 Diagnostics', 3);
 }
 
 // ── 8. REPORTS & VIEW ─────────────────────────────────────────────────────────
