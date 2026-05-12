@@ -156,8 +156,10 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   const nameParts = baseName.split(/[-_]/);
   if (nameParts.length >= 4) {
     const clean = nameParts.slice(3).join('')
-      .replace(/([a-z])([A-Z])/g, '$1 $2')
-      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+      .replace(/([a-z\d])([A-Z])/g,   '$1 $2')   // camelCase + digit-before-upper: "myTest"→"my Test", "3MMR"→"3 MMR"
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // consecutive caps: "HTMLParser"→"HTML Parser"
+      .replace(/([a-zA-Z])(\d)/g,     '$1 $2')   // letter-before-digit: "Level3"→"Level 3"
+      .replace(/(\d)([a-zA-Z])/g,     '$1 $2')   // digit-before-letter: "1Model"→"1 Model"
       .trim();
     sheet.getRange(r, COL.DESC).setValue(clean);
   }
