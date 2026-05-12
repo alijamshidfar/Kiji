@@ -993,7 +993,7 @@ function showUserGuide() {
   try {
     const tmpl = HtmlService.createTemplateFromFile('Sidebar');
     tmpl.logoBase64 = KAL_LOGO_BASE64;
-    const html = tmpl.evaluate().setTitle('').setWidth(350);
+    const html = tmpl.evaluate().setTitle('​').setWidth(350);
     SpreadsheetApp.getUi().showSidebar(html);
   } catch (e) {
     toast('Could not load the User Guide: ' + e.message, '❌ Error', 5);
