@@ -485,6 +485,7 @@
     <button class="tab-btn" onclick="showTab('columns', this)">Columns</button>
     <button class="tab-btn" onclick="showTab('menus', this)">Menus</button>
     <button class="tab-btn" onclick="showTab('codes', this)">Codes</button>
+    <button class="tab-btn" onclick="showTab('ai', this)">Why</button>
   </div>
 </div>
 
@@ -965,6 +966,128 @@
 <!-- ══════════════════════════════════════
      FOOTER
 ══════════════════════════════════════ -->
+<!-- ══════════════════════════════════════
+     TAB 5 – WHY STRUCTURE MATTERS
+══════════════════════════════════════ -->
+<div id="tab-ai" class="tab-panel content">
+
+  <!-- Intro -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🧠 The Metadata Packet</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>In a traditional system, a filename is just a label. In the KAL System, a filename is <strong>code</strong>. When the AI reads a structured name it performs instant <strong>decompression</strong> of a high-density metadata packet:</p>
+      <div class="name-format" style="font-size:10px;margin:10px 0;">
+        <span class="seg">20260512</span><span class="sep">_</span><span class="seg">OP</span><span class="sep">-</span><span class="seg">KAL</span><span class="sep">_</span><span class="seg">STRAT</span><span class="sep">_</span><span class="seg">TheKijiModel</span><span class="sep">_</span><span class="seg">v3</span>
+      </div>
+      <table class="col-table">
+        <tr><th>Segment</th><th>Signal decoded by AI</th></tr>
+        <tr><td class="col-letter">OP</td><td>Geographic anchor → Operations &amp; HR dept.</td></tr>
+        <tr><td class="col-letter">KAL</td><td>Corporate identity → KAL Academy voice</td></tr>
+        <tr><td class="col-letter">STRAT</td><td>Tonal trigger → visionary, strategic</td></tr>
+        <tr><td class="col-letter">TheKijiModel</td><td>Token split → "Kiji" + "Model" keywords</td></tr>
+        <tr><td class="col-letter">v3</td><td>Temporal context → draft authority level</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Feature Extraction -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🎯 1 — Semantic Feature Extraction</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>Structured naming provides the <strong>features</strong> (signals) that tell the AI how to think with 100% clarity:</p>
+      <div class="menu-item blue" style="margin-bottom:5px;">
+        <span class="fn-name">🗺️ The "Where" — Drive Code</span>
+        <span class="fn-desc"><code>OP</code> acts as a geographic anchor — <em>"You are in the Operations &amp; HR department."</em></span>
+      </div>
+      <div class="menu-item blue" style="margin-bottom:5px;">
+        <span class="fn-name">🏢 The "Who" — Entity Code</span>
+        <span class="fn-desc"><code>KAL</code> or <code>PC</code> provides corporate identity, preventing the AI from producing generic, off-brand content.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">📄 The "What" — DocType</span>
+        <span class="fn-desc"><code>STRAT</code> → visionary language.  <code>POLICY</code> → formal, compliance-driven.  The DocType is the AI's <strong>tonal switch</strong>.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CamelCase & Temporal -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>⏱️ 2 — CamelCase &amp; Temporal Intelligence</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <h3>CamelCase Token Splitting</h3>
+      <p>Humans use spaces; AI uses <strong>CamelCase</strong>. <code>TheKijiModel</code> lets the AI split tokens efficiently, recognising <em>"Kiji"</em> and <em>"Model"</em> as distinct, high-value keywords — impossible with a spaced filename.</p>
+      <div class="info-box">
+        <strong>Why it matters:</strong> Spaces break metadata parsing. CamelCase preserves human readability and machine precision simultaneously.
+      </div>
+      <h3 style="margin-top:10px;">Date &amp; Version Authority</h3>
+      <p>A standardised date (<code>YYYYMMDD</code>) and version create <strong>Temporal Context</strong>:</p>
+      <ul>
+        <li><code>vFINAL</code> → definitive, authoritative abstract tone</li>
+        <li><code>v1</code> → exploratory, provisional abstract tone</li>
+        <li>Date → correct chronological ordering across the registry</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- AI Skip -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>⚡ 3 — The "AI Skip": Efficient Intelligence</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>One of the most powerful features of the KAL System is knowing <strong>when not to work</strong>.</p>
+      <div class="status-row green-row" style="margin-bottom:5px;">
+        <div class="dot dot-green"></div>
+        <div><strong>State Recognition</strong><br><span style="font-size:11px;">Rows marked 🟢 or <code>vFINAL</code> are identified as complete.</span></div>
+      </div>
+      <div class="status-row none-row">
+        <div class="dot dot-none"></div>
+        <div><strong>The Skip Logic</strong><br><span style="font-size:11px;">Finalised files are bypassed during bulk syncs — their abstracts are not regenerated.</span></div>
+      </div>
+      <div class="info-box" style="margin-top:8px;">
+        <strong>The payoff:</strong> Custom-edited abstracts are preserved · API costs are slashed · Hundreds of files audited in seconds, not minutes.
+      </div>
+    </div>
+  </div>
+
+  <!-- Hallucination Control -->
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>🛡️ 4 — Hallucination Control</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <p>AI hallucinations occur when a model has too much <strong>creative freedom</strong>. The KAL System eliminates this by design.</p>
+      <div style="display:flex;gap:7px;margin:8px 0;">
+        <div style="flex:1;background:var(--red-bg);border-radius:var(--radius);padding:7px;font-size:11px;border:1px solid #f5c6c2;">
+          <strong style="color:var(--red);display:block;margin-bottom:4px;">❌ Without KAL</strong>
+          "This document appears to be related to some kind of organisational strategy…"
+        </div>
+        <div style="flex:1;background:var(--green-bg);border-radius:var(--radius);padding:7px;font-size:11px;border:1px solid #b7d9b0;">
+          <strong style="color:var(--green);display:block;margin-bottom:4px;">✅ With KAL</strong>
+          "This KAL Operations STRAT document presents the Kiji Model framework…"
+        </div>
+      </div>
+      <p>By providing verified codes from your Settings, you build a <strong>Grounded Boundary</strong>. The AI's only job is to expand your verified organisational logic into natural language — not invent it.</p>
+      <div class="info-box" style="margin-top:8px;">
+        <strong>🧬 The Digital Twin</strong><br>
+        Every abstract in Column L becomes a faithful representation of the actual file — 100% accurate, 100% professional, and 100% grounded in your organisation's unique DNA.
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-ai -->
+
 <div class="footer">
   KAL Academy · Smart File Registry · v2.0
 </div>
