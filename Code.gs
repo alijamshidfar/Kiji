@@ -947,24 +947,36 @@ function exportRegistryToPDF() {
   const pdfName = 'KAL_Registry_Export_' + dateStr + '.pdf';
 
   const exportUrl = 'https://docs.google.com/spreadsheets/d/' + ss.getId() + '/export?' + [
-    'format=pdf', 'gid=' + sheet.getSheetId(),
+    'format=pdf',
+    'id='          + ss.getId(),
+    'gid='         + sheet.getSheetId(),
     'portrait=false', 'fitw=true', 'size=A3',
     'top_margin=0.25', 'bottom_margin=0.25', 'left_margin=0.25', 'right_margin=0.25',
     'sheetnames=false', 'printtitle=false', 'pagenumbers=false', 'gridlines=false', 'fzr=false'
   ].join('&');
 
   try {
-    const blob = UrlFetchApp.fetch(exportUrl, { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() } })
-      .getBlob().setName(pdfName);
+    const response = UrlFetchApp.fetch(exportUrl, {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true
+    });
+    const code = response.getResponseCode();
+    if (code !== 200) throw new Error('Google export returned HTTP ' + code + '. Check that the sheet is not empty and you have access.');
+
+    const blob    = response.getBlob().setName(pdfName).setContentType('application/pdf');
     const destId  = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'A2'));
     const pdfFile = destId ? DriveApp.getFolderById(destId).createFile(blob) : DriveApp.createFile(blob);
+
     const html = HtmlService.createHtmlOutput(
       '<p style="font-family:Arial;padding:12px;font-size:13px">PDF ready: ' +
       '<a href="' + pdfFile.getUrl() + '" target="_blank"><b>' + pdfName + '</b></a></p>' +
       '<script>setTimeout(()=>google.script.host.close(),9000)</script>'
     ).setWidth(420).setHeight(70);
     SpreadsheetApp.getUi().showModalDialog(html, '📤 Export Complete');
-  } catch (e) { toast('Export failed: ' + e.message, '❌ Error', 6); console.error('exportRegistryToPDF: ' + e.message); }
+  } catch (e) {
+    toast('Export failed: ' + e.message, '❌ Error', 6);
+    console.error('exportRegistryToPDF: ' + e.message);
+  }
 }
 
 /** Toggles visibility of helper columns D, H, J, L. */
