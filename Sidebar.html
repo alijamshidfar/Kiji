@@ -456,9 +456,8 @@
           var el=document.getElementById('logo-el');
           el.className='';
           if(isSvg){
-            /* SVG has a tight viewBox — no clipping tricks needed */
             el.style.cssText='width:48px;height:48px;border-radius:6px;'
-              +'background:#fff;flex-shrink:0;overflow:hidden;';
+              +'flex-shrink:0;overflow:hidden;';
             img.style.cssText='width:48px;height:48px;object-fit:contain;';
           }else{
             /* PNG: bird is at ~78% x, ~20% y of a large white canvas.
