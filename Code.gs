@@ -235,9 +235,7 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
 
   if (applyBg) {
     sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(color);
-    // Sequential number: count non-blank filename rows from DATA_START up to r
-    const above = sheet.getRange(DATA_START, COL.FILENAME, r - DATA_START + 1, 1).getValues();
-    sheet.getRange(r, COL.ROW_NUM).setValue(above.filter(c => c[0]).length);
+    renumberAllRows_(sheet);
   }
   return color;
 }
@@ -386,17 +384,21 @@ function getDriveCodesOrdered() {
 // ── 4. SYNC LOGIC ─────────────────────────────────────────────────────────────
 
 /**
- * Sequentially numbers every row that has a filename, skipping blank rows.
- * Row 1 = first non-blank data row, regardless of sheet row position.
+ * Sequentially numbers rows that have a filename AND an existing Drive file.
+ * Rows with no filename or "File not found" get a blank in column A.
  */
 function renumberAllRows_(sheet) {
   const last = sheet.getLastRow();
   if (last < DATA_START) return;
   const n     = last - DATA_START + 1;
   const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const links = sheet.getRange(DATA_START, COL.LINK,     n, 1).getValues();
   let seq = 0;
   sheet.getRange(DATA_START, COL.ROW_NUM, n, 1).setValues(
-    names.map(row => [row[0] ? ++seq : ''])
+    names.map((row, i) => {
+      const fileExists = row[0] && links[i][0] !== 'File not found';
+      return [fileExists ? ++seq : ''];
+    })
   );
 }
 
