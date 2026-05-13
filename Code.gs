@@ -514,11 +514,15 @@ function updateAllInfo() {
   sheet.getRange(DATA_START, COL.DESC, numRows, LAST_COL - COL.DESC + 1).setBackgrounds(bgColors);
   renumberAllRows_(sheet);
 
-  // Lock all data rows to a compact height — setBackgrounds above can cause
-  // Google Sheets to re-evaluate row auto-sizing and expand rows with long text.
+  // Set row heights: 21 px for file rows, 14 px for blank separator rows
+  // (blank rows have no filename in col C — identified without extra API calls).
+  // Using two passes avoids a slow per-row API call inside the main loop.
   const lastDataRow = sheet.getLastRow();
   if (lastDataRow >= DATA_START) {
-    sheet.setRowHeights(DATA_START, lastDataRow - DATA_START + 1, 21);
+    const N = lastDataRow - DATA_START + 1;
+    sheet.setRowHeights(DATA_START, N, 21); // first pass: everything to 21 px
+    const colC = sheet.getRange(DATA_START, COL.FILENAME, N, 1).getValues();
+    colC.forEach((r, i) => { if (!r[0]) sheet.setRowHeight(DATA_START + i, 14); });
   }
 
   const msg = errors > 0
@@ -1280,15 +1284,12 @@ function rebuildRegistryFromDrive() {
 
   renumberAllRows_(sheet);
 
-  // Clip Abstract column and set row heights.
-  // File rows → 21 px; blank separator rows → 8 px (thin visual gap).
+  // Clip Abstract column to prevent long formula text from expanding rows.
+  // Row heights are set by updateAllInfo() below (21 px file rows, 14 px blank rows).
   const lastWritten = sheet.getLastRow();
   if (lastWritten >= DATA_START) {
-    const dataRows = lastWritten - DATA_START + 1;
-    sheet.getRange(DATA_START, COL.ABSTRACT, dataRows, 1)
+    sheet.getRange(DATA_START, COL.ABSTRACT, lastWritten - DATA_START + 1, 1)
          .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
-    sheet.setRowHeights(DATA_START, dataRows, 21);
-    blankRows.forEach(row => sheet.setRowHeight(row, 8));
   }
 
   const total = renderOrder.reduce((n, p) => n + (groups[p] || []).length, 0);
@@ -1482,19 +1483,13 @@ function rebuildFormatHeader_(sheet) {
 /** Reads logo blob from Settings!D2 (Drive share link or direct image URL). */
 function rebuildGetLogoBlobFromSettings_() {
   try {
-    const ss       = SpreadsheetApp.getActiveSpreadsheet();
-    const settings = ss.getSheetByName(SHEET.SETTINGS);
-    if (!settings) return null;
-    const cell = settings.getRange('D2');
-    const url  = cell.getRichTextValue().getLinkUrl() || cell.getValue().toString().trim();
+    const url = getUrlFromCell(SHEET.SETTINGS, 'D2');
     if (!url) return null;
-    // Google Drive share link → extract file ID and use DriveApp (avoids auth issues)
-    const driveId = (url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1];
-    if (driveId) return DriveApp.getFileById(driveId).getBlob();
-    // Direct image URL fallback
-    return UrlFetchApp.fetch(url).getBlob();
+    const fileId = getIdFromUrl(url);
+    if (fileId) return DriveApp.getFileById(fileId).getBlob();
+    return UrlFetchApp.fetch(url).getBlob(); // direct image URL fallback
   } catch (e) {
-    console.warn('Logo from Settings skipped: ' + e.message);
+    console.warn('Logo from Settings!D2 skipped: ' + e.message);
     return null;
   }
 }
