@@ -1233,29 +1233,32 @@ function rebuildRegistryFromDrive() {
   let r = DATA_START;
   let lastFileRow = -1;
   renderOrder.forEach((prefix, idx) => {
-    if (idx > 0 && lastFileRow >= DATA_START) {
-      // Thick red bottom border on last row of previous group
-      sheet.getRange(lastFileRow, 1, 1, COL.OWNER)
-           .setBorder(null, null, true, null, null, null,
-                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    if (idx > 0) {
       r += 3; // 3 blank rows between groups
     }
+    const groupStart = r;
     (groups[prefix] || []).forEach(file => {
       rebuildWriteFileRow_(sheet, r, file);
       lastFileRow = r++;
     });
+    // Red TOP border on first row of each group (except the very first) — marks start of drive section
+    if (idx > 0 && groupStart < r) {
+      sheet.getRange(groupStart, 1, 1, COL.OWNER)
+           .setBorder(true, null, null, null, null, null,
+                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    }
   });
-  // Thick red bottom border after last group too
+  // Red bottom border after the last group
   if (lastFileRow >= DATA_START) {
     sheet.getRange(lastFileRow, 1, 1, COL.OWNER)
          .setBorder(null, null, true, null, null, null,
                     SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
   }
 
-  // 6. Freeze, set specific column widths (A narrow; others balanced)
+  // 6. Freeze, set specific column widths
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
-  [40, 200, 300, 65, 65, 110, 50, 50, 150, 110, 130, 200, 80]
+  [40, 260, 360, 65, 65, 110, 50, 50, 150, 110, 130, 280, 80]
     .forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   renumberAllRows_(sheet);
@@ -1293,7 +1296,7 @@ function rebuildCollectGroups_() {
     } catch (_) {}
   });
 
-  // Sort within each group: entity code → doc type → version descending (newest first)
+  // Sort: entity code → doc type → base filename (alphabetical) → version desc (newest first)
   Object.values(groups).forEach(arr =>
     arr.sort((a, b) => {
       const na = a.getName(), nb = b.getName();
@@ -1303,7 +1306,9 @@ function rebuildCollectGroups_() {
       if (ea !== eb) return ea.localeCompare(eb);
       const da = pa[1] || '', db = pb[1] || '';
       if (da !== db) return da.localeCompare(db);
-      return rebuildExtractVer_(nb) - rebuildExtractVer_(na); // newest first
+      const ba = extractKALBaseName(na), bb = extractKALBaseName(nb);
+      if (ba !== bb) return ba.localeCompare(bb);   // same entity+doctype → alphabetical
+      return rebuildExtractVer_(nb) - rebuildExtractVer_(na); // same file → newest first
     })
   );
   return groups;
@@ -1431,14 +1436,21 @@ function rebuildFormatHeader_(sheet) {
 
   sheet.setRowHeight(1, 60);
 
-  // Insert Kiji logo into cell A1
+  // Insert Kiji logo into A1 — try cell image first, fall back to over-grid blob
   if (KAL_LOGO_BASE64) {
     try {
-      const dataUrl = 'data:image/svg+xml;base64,' + KAL_LOGO_BASE64;
-      const image   = SpreadsheetApp.newCellImage().setSourceUrl(dataUrl).build();
-      sheet.getRange(1, 1).setValue(image);
+      const decoded = Utilities.base64Decode(KAL_LOGO_BASE64);
+      const blob    = Utilities.newBlob(decoded, 'image/svg+xml', 'kiji-logo.svg');
+      sheet.insertImage(blob, 1, 1, 4, 4);
     } catch (e) {
-      console.warn('Logo insert skipped: ' + e.message);
+      try {
+        const dataUrl = 'data:image/svg+xml;base64,' + KAL_LOGO_BASE64;
+        sheet.getRange(1, 1).setValue(
+          SpreadsheetApp.newCellImage().setSourceUrl(dataUrl).build()
+        );
+      } catch (e2) {
+        console.warn('Logo insert skipped: ' + e2.message);
+      }
     }
   }
 }
