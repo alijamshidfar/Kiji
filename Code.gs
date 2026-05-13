@@ -1511,10 +1511,8 @@ function rebuildRegistryFromDrive() {
   // 5. Write file rows; red border line between groups (no colored row)
   let r = DATA_START;
   let lastFileRow = -1;
-  const blankRows = []; // track blank separator rows to give them a thin height
   renderOrder.forEach((prefix, idx) => {
     if (idx > 0) {
-      for (let b = 0; b < 3; b++) blankRows.push(r + b);
       r += 3; // 3 blank rows between groups
       // Red BOTTOM border on the last blank row (r-1) — placed on a thin row
       // that never gets content written to it, so the border always stays visible.
@@ -1528,17 +1526,8 @@ function rebuildRegistryFromDrive() {
       lastFileRow = r++;
     });
   });
-  // 3 trailing blank rows with navy col A + red bottom border to close the registry
-  if (lastFileRow >= DATA_START) {
-    for (let b = 1; b <= 3; b++) {
-      blankRows.push(lastFileRow + b);
-      sheet.getRange(lastFileRow + b, COL.ROW_NUM)
-           .setBackground(HEADER_BLUE).setValue('');
-    }
-    sheet.getRange(lastFileRow + 3, 1, 1, COL.OWNER)
-         .setBorder(null, null, true, null, null, null,
-                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
-  }
+  // Trailing blank rows and separator border are handled by maintainGroupSpacing_
+  // inside updateAllInfo() below — do not add them here to avoid doubling up.
 
   // 6. Freeze, set specific column widths
   sheet.setFrozenRows(1);
