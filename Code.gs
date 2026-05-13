@@ -518,15 +518,13 @@ function updateAllInfo() {
   // so that row-height pass below also covers any newly inserted blank rows.
   const rowsInserted = maintainGroupSpacing_(sheet);
 
-  // Set row heights: 21 px for file rows, 14 px for blank separator rows
-  // (blank rows have no filename in col C — identified without extra API calls).
-  // Using two passes avoids a slow per-row API call inside the main loop.
+  // Set row heights: 21 px for file rows, 20 px for blank separator rows
   const lastDataRow = sheet.getLastRow();
   if (lastDataRow >= DATA_START) {
     const N = lastDataRow - DATA_START + 1;
     sheet.setRowHeights(DATA_START, N, 21); // first pass: everything to 21 px
     const colC = sheet.getRange(DATA_START, COL.FILENAME, N, 1).getValues();
-    colC.forEach((r, i) => { if (!r[0]) sheet.setRowHeight(DATA_START + i, 14); });
+    colC.forEach((r, i) => { if (!r[0]) sheet.setRowHeight(DATA_START + i, 20); });
   }
 
   let msg = errors > 0
@@ -592,18 +590,20 @@ function maintainGroupSpacing_(sheet) {
         sheet.insertRowsAfter(endRow, needed);
         totalInserted += needed;
         for (let b = 1; b <= needed; b++) {
-          // Clear full row: inserted rows inherit the formatting of the row above,
-          // so col B–M would pick up the yellow/green background, content, and
-          // data-validation dropdowns (e.g. Preferred KAL Template) from the file row.
+          // Clear full row: inserted rows inherit ALL formatting from the row above
+          // (background, font size, font colour, data validations, etc.).
           const blankRange = sheet.getRange(endRow + b, 2, 1, COL.OWNER - 1);
-          blankRange.setBackground(null).clearContent().clearDataValidations();
+          blankRange.setBackground(null)
+                    .setFontSize(10).setFontWeight('normal').setFontColor(null)
+                    .setHorizontalAlignment('left')
+                    .clearContent().clearDataValidations();
           sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
-          sheet.setRowHeight(endRow + b, 14);
+          sheet.setRowHeight(endRow + b, 20);
         }
-        // Also ensure the two existing blank rows (if any) have 14 px height + navy col A
+        // Also ensure any pre-existing blank rows in this gap have consistent styling
         for (let b = needed + 1; b <= 3; b++) {
           sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
-          sheet.setRowHeight(endRow + b, 14);
+          sheet.setRowHeight(endRow + b, 20);
         }
       }
       // Always (re-)stamp the red bottom border on the 3rd blank row so it is
@@ -628,7 +628,7 @@ function maintainGroupSpacing_(sheet) {
       if (trailBlanks < 3) {
         for (let b = trailBlanks + 1; b <= 3; b++) {
           sheet.getRange(trailFile + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
-          sheet.setRowHeight(trailFile + b, 14);
+          sheet.setRowHeight(trailFile + b, 20);
         }
       }
       // Always (re-)stamp the trailing red border, whether or not rows were added.
