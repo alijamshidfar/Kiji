@@ -518,13 +518,23 @@ function updateAllInfo() {
   // so that row-height pass below also covers any newly inserted blank rows.
   const rowsInserted = maintainGroupSpacing_(sheet);
 
-  // Set row heights: 21 px for file rows, 20 px for blank separator rows
+  // Set row heights: ROW_HEIGHT_FILE for file rows, ROW_HEIGHT_SEP for blank separator rows.
+  // Batch consecutive blank runs into single setRowHeights calls.
   const lastDataRow = sheet.getLastRow();
   if (lastDataRow >= DATA_START) {
     const N = lastDataRow - DATA_START + 1;
-    sheet.setRowHeights(DATA_START, N, 21); // first pass: everything to 21 px
+    sheet.setRowHeights(DATA_START, N, ROW_HEIGHT_FILE);
     const colC = sheet.getRange(DATA_START, COL.FILENAME, N, 1).getValues();
-    colC.forEach((r, i) => { if (!r[0]) sheet.setRowHeight(DATA_START + i, 20); });
+    let runStart = -1;
+    for (let i = 0; i <= N; i++) {
+      const isBlank = i < N && !colC[i][0];
+      if (isBlank && runStart < 0) {
+        runStart = i;
+      } else if (!isBlank && runStart >= 0) {
+        sheet.setRowHeights(DATA_START + runStart, i - runStart, ROW_HEIGHT_SEP);
+        runStart = -1;
+      }
+    }
   }
 
   let msg = errors > 0
@@ -571,6 +581,41 @@ function removeDuplicateFilenames_(sheet) {
   return true;
 }
 
+/** Extracts the drive-code prefix (e.g. 'OP') from a KAL filename, or '??' if none. */
+function extractDriveCodePrefix_(fn) {
+  const m = fn.match(/^([A-Za-z]{2,4})-/);
+  return m ? m[1].toUpperCase() : '??';
+}
+
+/**
+ * Batch-styles newly inserted blank separator rows (cols B-M cleared, col A navy,
+ * height set to ROW_HEIGHT_SEP).  Uses range operations to minimise API calls.
+ */
+function styleNewBlankRows_(sheet, startRow, count) {
+  if (count <= 0) return;
+  sheet.getRange(startRow, 2, count, COL.OWNER - 1)
+       .setBackground(null)
+       .setFontSize(10).setFontWeight('normal').setFontColor(null)
+       .setHorizontalAlignment('left')
+       .clearContent().clearDataValidations();
+  sheet.getRange(startRow, COL.ROW_NUM, count, 1)
+       .setBackground(HEADER_BLUE)
+       .setValues(Array.from({ length: count }, () => ['']));
+  sheet.setRowHeights(startRow, count, ROW_HEIGHT_SEP);
+}
+
+/**
+ * Clears all bottom borders in the separator zone in one API call, then stamps
+ * exactly one thick red bottom border at fileRow + SEP_BLANK_ROWS.
+ */
+function stampSeparatorBorder_(sheet, fileRow, sepSize) {
+  sheet.getRange(fileRow + 1, 1, sepSize, COL.OWNER)
+       .setBorder(null, null, false, null, null, null);
+  sheet.getRange(fileRow + SEP_BLANK_ROWS, 1, 1, COL.OWNER)
+       .setBorder(null, null, true, null, null, null,
+                  SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+}
+
 /**
  * Reads filenames from col C and returns [{prefix, firstRow, lastRow}] for each
  * consecutive run of files sharing the same drive-code prefix.  Blank rows skipped.
@@ -578,14 +623,13 @@ function removeDuplicateFilenames_(sheet) {
 function buildGroups_(sheet) {
   const lastRow = sheet.getLastRow();
   if (lastRow < DATA_START) return [];
-  const n     = lastRow - DATA_START + 1;
-  const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const n      = lastRow - DATA_START + 1;
+  const names  = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
   const groups = [];
   for (let i = 0; i < n; i++) {
     const fn = (names[i][0] || '').toString().trim();
     if (!fn) continue;
-    const m      = fn.match(/^([A-Za-z]{2,4})-/);
-    const prefix = m ? m[1].toUpperCase() : '??';
+    const prefix = extractDriveCodePrefix_(fn);
     const r      = DATA_START + i;
     if (!groups.length || groups[groups.length - 1].prefix !== prefix) {
       groups.push({ prefix, firstRow: r, lastRow: r });
@@ -670,124 +714,76 @@ function maintainGroupSpacing_(sheet) {
   try {
     if (sheet.getLastRow() < DATA_START) return 0;
 
-    // 1. Move any rows that are in the wrong section to their correct group.
-    consolidateMisplacedRows_(sheet);
-
-    // 2. Remove duplicate filenames created by the move (e.g. user typed a
-    //    filename that already exists in the target group).
+    const consolidated = consolidateMisplacedRows_(sheet);
     removeDuplicateFilenames_(sheet);
 
-    // 3. Build groups fresh (rows may have moved or been deleted above).
     const groups = buildGroups_(sheet);
-
-    console.log('maintainGroupSpacing_: detected ' + groups.length + ' group(s): ' +
-      groups.map(g => g.prefix + '[' + g.firstRow + '-' + g.lastRow + ']').join(', '));
-
     if (!groups.length) return 0;
+
+    console.log('maintainGroupSpacing_: ' + groups.length + ' group(s): ' +
+      groups.map(g => g.prefix + '[' + g.firstRow + '-' + g.lastRow + ']').join(', '));
 
     let totalInserted = 0;
 
-    // ── Inter-group spacing (bottom-to-top) ─────────────────────────────────
+    // ── Inter-group spacing (bottom-to-top to avoid row-index shifts) ─────────
     for (let g = groups.length - 2; g >= 0; g--) {
       const endRow = groups[g].lastRow;
       const nxtRow = groups[g + 1].firstRow;
-      const blanks = nxtRow - endRow - 1; // blank rows currently between the two groups
-      console.log('maintainGroupSpacing_: gap between ' + groups[g].prefix +
-        ' (end=' + endRow + ') and ' + groups[g+1].prefix +
-        ' (start=' + nxtRow + '): ' + blanks + ' blank row(s)');
+      const blanks = nxtRow - endRow - 1;
 
-      if (blanks < 3) {
-        // ── Too few blanks → insert missing rows ──────────────────────────
-        const needed = 3 - blanks;
-        console.log('maintainGroupSpacing_: inserting ' + needed + ' row(s) after row ' + endRow);
+      if (blanks < SEP_BLANK_ROWS) {
+        const needed = SEP_BLANK_ROWS - blanks;
         sheet.insertRowsAfter(endRow, needed);
         totalInserted += needed;
-        for (let b = 1; b <= needed; b++) {
-          // Clear full row: inserted rows inherit ALL formatting from the row above
-          // (background, font size, font colour, data validations, etc.).
-          const blankRange = sheet.getRange(endRow + b, 2, 1, COL.OWNER - 1);
-          blankRange.setBackground(null)
-                    .setFontSize(10).setFontWeight('normal').setFontColor(null)
-                    .setHorizontalAlignment('left')
-                    .clearContent().clearDataValidations();
-          sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
-          sheet.setRowHeight(endRow + b, 20);
+        styleNewBlankRows_(sheet, endRow + 1, needed);
+        if (blanks > 0) {
+          styleNewBlankRows_(sheet, endRow + needed + 1, blanks);
         }
-        // Ensure any pre-existing blank rows in this gap also have correct styling
-        for (let b = needed + 1; b <= 3; b++) {
-          sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
-          sheet.setRowHeight(endRow + b, 20);
-        }
-
-      } else if (blanks > 3) {
-        // ── Too many blanks → delete the extra rows ───────────────────────
-        // Happens when a user clears a filename that was inside the separator zone.
-        // Safe to delete because all rows between the two groups are blank.
-        const extra = blanks - 3;
-        console.log('maintainGroupSpacing_: removing ' + extra + ' extra blank row(s) after row ' + endRow);
-        sheet.deleteRows(endRow + 1, extra);
-        // nxtRow has shifted up; update the next group's firstRow so the
-        // trailing-blanks check below sees the correct sheet state.
-        groups[g + 1].firstRow -= extra;
+      } else if (blanks > SEP_BLANK_ROWS) {
+        sheet.deleteRows(endRow + 1, blanks - SEP_BLANK_ROWS);
+        groups[g + 1].firstRow -= (blanks - SEP_BLANK_ROWS);
       }
 
-      // Clear any stale bottom borders in the separator zone (e.g. a border left
-      // at position 4 when a file row was cleared, shifting everything up).
-      // Then re-stamp exactly one border at position 3 (bottom of 3rd blank row).
-      const sepSize = Math.max(blanks, 3);
-      for (let sb = 1; sb <= sepSize; sb++) {
-        sheet.getRange(endRow + sb, 1, 1, COL.OWNER)
-             .setBorder(null, null, false, null, null, null);
-      }
-      sheet.getRange(endRow + 3, 1, 1, COL.OWNER)
-           .setBorder(null, null, true, null, null, null,
-                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+      stampSeparatorBorder_(sheet, endRow, SEP_BLANK_ROWS);
     }
 
-    // ── Trailing blank rows after the last group ─────────────────────────────
-    // Re-read last row after any insertions above shifted everything down.
+    // ── Trailing blank rows after the last group ──────────────────────────────
+    // Batch-read filenames to find the last file row without per-row getValue() calls.
     const curLast = sheet.getLastRow();
-    let trailFile = curLast;
-    while (trailFile >= DATA_START &&
-           !sheet.getRange(trailFile, COL.FILENAME).getValue()) {
-      trailFile--;
-    }
-    if (trailFile >= DATA_START) {
-      const trailBlanks = curLast - trailFile;
-      console.log('maintainGroupSpacing_: trailing blanks after last file (row ' +
-        trailFile + '): ' + trailBlanks);
-      if (trailBlanks < 3) {
-        for (let b = trailBlanks + 1; b <= 3; b++) {
-          sheet.getRange(trailFile + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
-          sheet.setRowHeight(trailFile + b, 20);
-        }
-      }
-      // Clear stale borders then re-stamp at position 3.
-      const trailSepSize = Math.max(trailBlanks, 3);
-      for (let sb = 1; sb <= trailSepSize; sb++) {
-        sheet.getRange(trailFile + sb, 1, 1, COL.OWNER)
-             .setBorder(null, null, false, null, null, null);
-      }
-      sheet.getRange(trailFile + 3, 1, 1, COL.OWNER)
-           .setBorder(null, null, true, null, null, null,
-                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    const nTotal  = curLast - DATA_START + 1;
+    const allNames = sheet.getRange(DATA_START, COL.FILENAME, nTotal, 1).getValues();
+    let lastFileRow = DATA_START - 1;
+    for (let i = nTotal - 1; i >= 0; i--) {
+      if (allNames[i][0]) { lastFileRow = DATA_START + i; break; }
     }
 
-    const summary = groups.map(g =>
-      g.prefix + '[' + g.firstRow + '-' + g.lastRow + ']'
-    ).join(', ');
-    SpreadsheetApp.getActiveSpreadsheet().toast(
-      'Groups: ' + (groups.length ? summary : 'none') +
-      '\nRows inserted: ' + totalInserted,
-      '🔧 Spacing Check', 6
-    );
-    console.log('maintainGroupSpacing_: done — ' + totalInserted + ' row(s) inserted');
+    if (lastFileRow >= DATA_START) {
+      const trailBlanks = curLast - lastFileRow;
+      if (trailBlanks < SEP_BLANK_ROWS) {
+        const needed = SEP_BLANK_ROWS - trailBlanks;
+        sheet.insertRowsAfter(curLast, needed);
+        styleNewBlankRows_(sheet, curLast + 1, needed);
+        if (trailBlanks > 0) {
+          styleNewBlankRows_(sheet, lastFileRow + 1, trailBlanks);
+        }
+      } else if (trailBlanks > SEP_BLANK_ROWS) {
+        sheet.deleteRows(lastFileRow + SEP_BLANK_ROWS + 1, trailBlanks - SEP_BLANK_ROWS);
+        styleNewBlankRows_(sheet, lastFileRow + 1, SEP_BLANK_ROWS);
+      } else {
+        styleNewBlankRows_(sheet, lastFileRow + 1, SEP_BLANK_ROWS);
+      }
+      stampSeparatorBorder_(sheet, lastFileRow, SEP_BLANK_ROWS);
+    }
+
+    if (totalInserted > 0 || consolidated) {
+      console.log('maintainGroupSpacing_: done — ' + totalInserted +
+        ' row(s) inserted, consolidated=' + consolidated);
+    }
     return totalInserted;
 
   } catch (e) {
     SpreadsheetApp.getActiveSpreadsheet().toast(
-      'maintainGroupSpacing_ ERROR:\n' + e.message,
-      '❌ Spacing Error', 8
+      'maintainGroupSpacing_ ERROR:\n' + e.message, '❌ Spacing Error', 8
     );
     console.error('maintainGroupSpacing_ ERROR: ' + e.message + '\nStack: ' + e.stack);
     return 0;

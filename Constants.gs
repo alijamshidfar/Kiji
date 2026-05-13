@@ -49,6 +49,11 @@ const SEPARATOR_RED = '#cc0000'; // red separator rows between drive-code groups
 // Edit this array to change the grouping order. Unknown codes follow, sorted.
 const REBUILD_PREFIX_ORDER = ['OP', 'KAL', 'LP', 'PC'];
 
+// ── Row / spacing dimensions ──────────────────────────────────────────────────
+const ROW_HEIGHT_FILE = 21;  // px — data file rows
+const ROW_HEIGHT_SEP  = 20;  // px — blank separator rows between groups
+const SEP_BLANK_ROWS  = 3;   // blank rows required between each drive-code group
+
 // ── KAL logo ─────────────────────────────────────────────────────────────────
 // KAL_LOGO_PNG_BASE64: paste the base64 of your PNG here — used in the sheet header (A1).
 // KAL_LOGO_BASE64:     SVG base64 — used in the sidebar only.
