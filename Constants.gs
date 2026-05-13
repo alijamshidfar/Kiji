@@ -46,7 +46,7 @@ const HEADER_BLUE = '#1a56db';  // vivid royal blue matching the sheet header
 
 // Drive-code prefix order for rebuildRegistryFromDrive()
 // Edit this array to change the grouping order. Unknown codes follow, sorted.
-const REBUILD_PREFIX_ORDER = ['OP', 'KAL', 'PC'];
+const REBUILD_PREFIX_ORDER = ['OP', 'KAL', 'LP', 'PC'];
 
 // ── KAL logo (Base64-encoded PNG) ────────────────────────────────────────────
 // Paste the full base64 string between the quotes.

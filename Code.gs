@@ -1244,8 +1244,10 @@ function rebuildCollectGroups_() {
       while (iter.hasNext()) {
         const f = iter.next();
         if (seen.has(f.getId())) continue;
-        const m = f.getName().match(/^([A-Z]{2,4})-/);
-        if (!m) continue;                          // skip non-KAL-pattern files
+        const n = f.getName();
+        // Must match KAL pattern: UPPERCASE-UPPERCASE_... (underscore required)
+        const m = n.match(/^([A-Z]{2,4})-[A-Z]/);
+        if (!m || !n.includes('_')) continue;
         seen.add(f.getId());
         const key = m[1];
         if (!groups[key]) groups[key] = [];
@@ -1272,13 +1274,11 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
   // Parse filename: DRIVECODE-ENTITY_DOCTYPE_NameParts[_YYYYMMDD][_vN|_vFINAL]
   const parts   = name.split('_');
   const prefix  = parts[0] || '';               // e.g. "OP-KAL"
-  const docType = parts[1] || '';               // e.g. "POLICY"
 
-  // Human-readable: everything after docType, strip trailing date + version
-  const rawDesc = parts.slice(2).join(' ')
-    .replace(/_?\d{8}$/, '')
-    .replace(/_?v\d+$/i, '')
-    .replace(/_?vFINAL$/i, '')
+  // Human-readable: parts after docType, filtering out date (8 digits) and version tokens
+  const rawDesc = parts.slice(2)
+    .filter(p => !/^\d{8}$/.test(p) && !/^v\d+$/i.test(p) && !/^vFINAL$/i.test(p))
+    .join(' ')
     .trim();
   const humanDesc = rawDesc
     .replace(/([a-z\d])([A-Z])/g,    '$1 $2')
@@ -1299,8 +1299,9 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
   const folderName = folder ? folder.getName() : '';
   const folderUrl  = folder ? folder.getUrl()  : '';
 
-  // Write plain values first
-  sheet.getRange(r, 1, 1, COL.OWNER).setValues([[
+  // Write plain values and reset background to white (row may follow a blue separator)
+  const rowRange = sheet.getRange(r, 1, 1, COL.OWNER);
+  rowRange.setBackground(null).setValues([[
     '',          // A: row number (renumberAllRows_ fills this)
     humanDesc,   // B: human-readable description
     name,        // C: filename
