@@ -1251,18 +1251,17 @@ function rebuildRegistryFromDrive() {
     if (idx > 0) {
       for (let b = 0; b < 3; b++) blankRows.push(r + b);
       r += 3; // 3 blank rows between groups
+      // Red BOTTOM border on the last blank row (r-1) — placed on a thin row
+      // that never gets content written to it, so the border always stays visible.
+      // Visually this line sits right above the first file row of the new group.
+      sheet.getRange(r - 1, 1, 1, COL.OWNER)
+           .setBorder(null, null, true, null, null, null,
+                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
     }
-    const groupStart = r;
     (groups[prefix] || []).forEach(file => {
       rebuildWriteFileRow_(sheet, r, file);
       lastFileRow = r++;
     });
-    // Red TOP border on first row of each group (except the very first)
-    if (idx > 0 && groupStart < r) {
-      sheet.getRange(groupStart, 1, 1, COL.OWNER)
-           .setBorder(true, null, null, null, null, null,
-                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
-    }
   });
   // 3 trailing blank rows with navy col A + red bottom border to close the registry
   if (lastFileRow >= DATA_START) {
