@@ -1328,14 +1328,20 @@ function refreshAllAbstractFormulas_() {
   });
 
   const range = sheet.getRange(DATA_START, COL.ABSTRACT, n, 1);
-  // clearFormat() first — getMaxRows().clear() can leave cells in "Plain text"
-  // format which causes Sheets to display the formula as literal text instead
-  // of evaluating it.
-  range.clearFormat();
+  // Reset cell format to Automatic (empty string '') so Sheets treats the
+  // content as a formula. 'General' is NOT the correct GAS format code —
+  // it can be interpreted as a custom literal-text format that blocks formulas.
   range.clearContent();
-  SpreadsheetApp.flush(); // commit clear before re-writing
-  range.setNumberFormat('General'); // explicitly ensure cells accept formulas
-  range.setFormulas(formulas);
+  SpreadsheetApp.flush();
+  range.setNumberFormat(''); // '' = Automatic/General in GAS
+  // Write each formula individually so Sheets processes them one at a time
+  // rather than as a bulk batch (batch setFormulas can silently fail for AI functions).
+  fileNames.forEach((row, i) => {
+    if (!row[0]) return; // skip blank/separator rows
+    const r   = DATA_START + i;
+    const f   = '=AI("Write a two-sentence abstract. Description: "&B' + r + '&". Filename: "&C' + r + ')';
+    sheet.getRange(r, COL.ABSTRACT).setFormula(f);
+  });
   SpreadsheetApp.flush();
 }
 
@@ -1522,8 +1528,12 @@ function rebuildFormatHeader_(sheet) {
       ? Utilities.newBlob(Utilities.base64Decode(KAL_LOGO_PNG_BASE64), 'image/png', 'kiji-logo.png')
       : null) || rebuildGetLogoBlobFromSettings_();
   if (blob) {
-    try { sheet.insertImage(blob, 1, 1, 4, 4); }
-    catch (e) { console.warn('Logo insert skipped: ' + e.message); }
+    try {
+      sheet.insertImage(blob, 1, 1); // anchor to A1, no pixel offset
+      console.log('Logo inserted successfully');
+    } catch (e) {
+      console.warn('Logo insertImage failed: ' + e.message);
+    }
   }
 }
 
@@ -1531,12 +1541,20 @@ function rebuildFormatHeader_(sheet) {
 function rebuildGetLogoBlobFromSettings_() {
   try {
     const url = getUrlFromCell(SHEET.SETTINGS, 'D2');
-    if (!url) return null;
-    const fileId = getIdFromUrl(url);
-    if (fileId) return DriveApp.getFileById(fileId).getBlob();
-    return UrlFetchApp.fetch(url).getBlob(); // direct image URL fallback
+    if (!url) { console.warn('Logo: no URL found in Settings!D2'); return null; }
+
+    // Extract Drive file ID with a precise pattern (avoids capturing path segments)
+    const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+    if (driveMatch) {
+      console.log('Logo: using Drive file ID ' + driveMatch[1]);
+      return DriveApp.getFileById(driveMatch[1]).getBlob();
+    }
+
+    // Fallback: treat as direct image URL
+    console.log('Logo: fetching direct URL');
+    return UrlFetchApp.fetch(url, {muteHttpExceptions: true}).getBlob();
   } catch (e) {
-    console.warn('Logo from Settings!D2 skipped: ' + e.message);
+    console.warn('Logo from Settings!D2 failed: ' + e.message);
     return null;
   }
 }
