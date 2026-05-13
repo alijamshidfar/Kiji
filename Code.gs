@@ -161,11 +161,13 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   // ── Smart CamelCase description extractor ─────────────────────────────────
   const nameParts = baseName.split(/[-_]/);
   if (nameParts.length >= 4) {
-    const clean = nameParts.slice(3).join('')
-      .replace(/([a-z\d])([A-Z])/g,   '$1 $2')   // camelCase + digit-before-upper: "myTest"→"my Test", "3MMR"→"3 MMR"
-      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2') // consecutive caps: "HTMLParser"→"HTML Parser"
-      .replace(/([a-zA-Z])(\d)/g,     '$1 $2')   // letter-before-digit: "Level3"→"Level 3"
-      .replace(/(\d)([a-zA-Z])/g,     '$1 $2')   // digit-before-letter: "1Model"→"1 Model"
+    const clean = nameParts.slice(3)
+      .filter(p => !/^\d{8}$/.test(p) && !/^v\d+$/i.test(p) && !/^vFINAL$/i.test(p))
+      .join('')
+      .replace(/([a-z\d])([A-Z])/g,    '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g,'$1 $2')
+      .replace(/([a-zA-Z])(\d)/g,      '$1 $2')
+      .replace(/(\d)([a-zA-Z])/g,      '$1 $2')
       .trim();
     sheet.getRange(r, COL.DESC).setValue(clean);
   }
@@ -401,13 +403,35 @@ function renumberAllRows_(sheet) {
   const n     = last - DATA_START + 1;
   const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
   const links = sheet.getRange(DATA_START, COL.LINK,     n, 1).getValues();
+
   let seq = 0;
-  sheet.getRange(DATA_START, COL.ROW_NUM, n, 1).setValues(
-    names.map((row, i) => {
-      const fileExists = row[0] && links[i][0] !== 'File not found';
-      return [fileExists ? ++seq : ''];
-    })
-  );
+  const values  = [];
+  const bgs     = [];
+  const fColors = [];
+  const weights = [];
+  const aligns  = [];
+
+  names.forEach((row, i) => {
+    const hasFile    = !!row[0];
+    const fileExists = hasFile && links[i][0] !== 'File not found';
+    values.push([fileExists ? ++seq : '']);
+
+    if (hasFile) {
+      bgs.push([HEADER_BLUE]); fColors.push(['#ffffff']);
+      weights.push(['bold']);  aligns.push(['center']);
+    } else {
+      // Separator rows (red/navy bg): preserve colour; blank rows: white
+      bgs.push([null]); fColors.push([null]);
+      weights.push([null]); aligns.push(['center']);
+    }
+  });
+
+  const colA = sheet.getRange(DATA_START, COL.ROW_NUM, n, 1);
+  colA.setValues(values)
+      .setBackgrounds(bgs)
+      .setFontColors(fColors)
+      .setFontWeights(weights)
+      .setHorizontalAlignments(aligns);
 }
 
 /**
@@ -522,13 +546,15 @@ function GET_SMART_DETAILS(baseName) {
   const NOT_FOUND = { type: '', version: 'Not Found', folderName: 'Not Found', folderLink: '', fileLink: 'Not Found' };
   if (!baseName) return NOT_FOUND;
 
-  const escaped   = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Strip _YYYYMMDD_vN suffix so the search finds all versions of the file
+  const base      = extractKALBaseName(baseName);
+  const escaped   = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const versionRe = new RegExp(escaped + '.*[vV](\\d+|FINAL)', 'i');
   let latestVerNum = -1;
   const details    = Object.assign({}, NOT_FOUND);
 
   try {
-    const files = DriveApp.searchFiles("title contains '" + baseName + "'");
+    const files = DriveApp.searchFiles("title contains '" + base + "'");
     while (files.hasNext()) {
       const file  = files.next();
       const match = file.getName().match(versionRe);
