@@ -1328,9 +1328,15 @@ function refreshAllAbstractFormulas_() {
   });
 
   const range = sheet.getRange(DATA_START, COL.ABSTRACT, n, 1);
+  // clearFormat() first — getMaxRows().clear() can leave cells in "Plain text"
+  // format which causes Sheets to display the formula as literal text instead
+  // of evaluating it.
+  range.clearFormat();
   range.clearContent();
-  SpreadsheetApp.flush(); // ensure clear is committed before re-writing
+  SpreadsheetApp.flush(); // commit clear before re-writing
+  range.setNumberFormat('General'); // explicitly ensure cells accept formulas
   range.setFormulas(formulas);
+  SpreadsheetApp.flush();
 }
 
 /** Searches Drive for all KAL-convention files; returns {PREFIX: [DriveFile]} map. */
@@ -1502,12 +1508,19 @@ function rebuildFormatHeader_(sheet) {
 
   sheet.setRowHeight(1, 60);
 
+  // Remove any existing logo images in row 1 — each rebuild would otherwise
+  // stack a new image on top because the header row is outside the clear range.
+  try {
+    sheet.getImages().forEach(img => {
+      if (img.getAnchorCell().getRow() === 1) img.remove();
+    });
+  } catch (_) {}
+
   // Insert Kiji logo into A1.
   // Priority: KAL_LOGO_PNG_BASE64 constant → Settings tab D2 (Drive link or direct URL)
-  const blob = rebuildGetLogoBlobFromSettings_() ||
-    (KAL_LOGO_PNG_BASE64
+  const blob = (KAL_LOGO_PNG_BASE64
       ? Utilities.newBlob(Utilities.base64Decode(KAL_LOGO_PNG_BASE64), 'image/png', 'kiji-logo.png')
-      : null);
+      : null) || rebuildGetLogoBlobFromSettings_();
   if (blob) {
     try { sheet.insertImage(blob, 1, 1, 4, 4); }
     catch (e) { console.warn('Logo insert skipped: ' + e.message); }
