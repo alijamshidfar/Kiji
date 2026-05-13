@@ -525,10 +525,85 @@ function updateAllInfo() {
     colC.forEach((r, i) => { if (!r[0]) sheet.setRowHeight(DATA_START + i, 14); });
   }
 
+  // Ensure 3 blank rows between groups and after the last group.
+  // If the user filled a separator row with a new filename, this inserts the missing rows.
+  maintainGroupSpacing_(sheet);
+
   const msg = errors > 0
     ? 'Done — ' + errors + ' row(s) had errors (View → Logs).'
     : 'All ' + numRows + ' rows audited successfully.';
   toast(msg, '🔄 Audit Complete', 4);
+}
+
+/**
+ * After each audit, guarantees exactly 3 blank rows between drive-code groups
+ * and after the last group.  When a user fills a blank separator row with a
+ * new filename, the next Sync call inserts the missing blank rows and
+ * re-applies the navy col-A styling and red separator border.
+ *
+ * Processes boundaries bottom-to-top so insertions at one boundary never
+ * invalidate the row numbers captured for boundaries higher up the sheet.
+ */
+function maintainGroupSpacing_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) return;
+
+  const n     = lastRow - DATA_START + 1;
+  const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+
+  // Build consecutive groups by drive-code prefix
+  const groups = []; // [{prefix, firstRow, lastRow}]
+  for (let i = 0; i < n; i++) {
+    const fn     = (names[i][0] || '').toString().trim();
+    if (!fn) continue;
+    const prefix = (fn.match(/^([A-Z]{2,4})-/) || ['', '??'])[1];
+    const r      = DATA_START + i;
+    if (!groups.length || groups[groups.length - 1].prefix !== prefix) {
+      groups.push({ prefix, firstRow: r, lastRow: r });
+    } else {
+      groups[groups.length - 1].lastRow = r;
+    }
+  }
+  if (!groups.length) return;
+
+  // ── Inter-group spacing (bottom-to-top) ───────────────────────────────────
+  for (let g = groups.length - 2; g >= 0; g--) {
+    const endRow = groups[g].lastRow;
+    const nxtRow = groups[g + 1].firstRow;
+    const blanks = nxtRow - endRow - 1; // blank rows currently between the two groups
+    if (blanks < 3) {
+      const needed = 3 - blanks;
+      sheet.insertRowsAfter(endRow, needed);
+      for (let b = 1; b <= needed; b++) {
+        sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
+        sheet.setRowHeight(endRow + b, 14);
+      }
+      // Red bottom border on the 3rd blank row (= the visual separator line)
+      sheet.getRange(endRow + 3, 1, 1, COL.OWNER)
+           .setBorder(null, null, true, null, null, null,
+                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    }
+  }
+
+  // ── Trailing blank rows after the last group ──────────────────────────────
+  // Re-read last row after any insertions above shifted everything down.
+  const curLast = sheet.getLastRow();
+  let trailFile = curLast;
+  while (trailFile >= DATA_START &&
+         !sheet.getRange(trailFile, COL.FILENAME).getValue()) {
+    trailFile--;
+  }
+  if (trailFile < DATA_START) return;
+  const trailBlanks = curLast - trailFile;
+  if (trailBlanks < 3) {
+    for (let b = trailBlanks + 1; b <= 3; b++) {
+      sheet.getRange(trailFile + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
+      sheet.setRowHeight(trailFile + b, 14);
+    }
+    sheet.getRange(trailFile + 3, 1, 1, COL.OWNER)
+         .setBorder(null, null, true, null, null, null,
+                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+  }
 }
 
 function updateSelectedInfo() {
