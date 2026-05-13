@@ -1209,13 +1209,14 @@ function rebuildRegistryFromDrive() {
   // 1. Format header row
   rebuildFormatHeader_(sheet);
 
-  // 2. Clear existing data + a 200-row buffer beyond getLastRow()
-  //    (border-only rows have no cell content so getLastRow() misses them,
-  //     leaving stale red lines from previous rebuilds — the buffer catches those)
-  const lastRow    = sheet.getLastRow();
-  const clearStart = DATA_START;
-  const clearCount = Math.max(lastRow >= DATA_START ? lastRow - DATA_START + 1 : 0, 200);
-  sheet.getRange(clearStart, 1, clearCount, COL.OWNER).clear();
+  // 2. Clear ALL rows from DATA_START to the sheet's maximum row count.
+  //    Using getMaxRows() (not getLastRow()) ensures border-only rows — which have
+  //    no cell content and are therefore invisible to getLastRow() — are also wiped,
+  //    preventing ghost red lines from surviving across rebuilds.
+  const maxRows = sheet.getMaxRows();
+  if (maxRows >= DATA_START) {
+    sheet.getRange(DATA_START, 1, maxRows - DATA_START + 1, COL.OWNER).clear();
+  }
 
   // 3. Collect Drive files grouped by drive-code prefix
   const groups = rebuildCollectGroups_();
@@ -1251,12 +1252,8 @@ function rebuildRegistryFromDrive() {
                       SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
     }
   });
-  // Red bottom border after the last group + 3 blank navy rows
+  // 3 blank rows with navy col A after the final group (no bottom red border)
   if (lastFileRow >= DATA_START) {
-    sheet.getRange(lastFileRow, 1, 1, COL.OWNER)
-         .setBorder(null, null, true, null, null, null,
-                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
-    // 3 blank rows with navy col A after the final group
     for (let b = 1; b <= 3; b++) {
       sheet.getRange(lastFileRow + b, COL.ROW_NUM)
            .setBackground(HEADER_BLUE).setValue('');
