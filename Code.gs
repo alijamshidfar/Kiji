@@ -1460,6 +1460,19 @@ function rebuildCollectGroups_() {
       return rebuildExtractVer_(nb) - rebuildExtractVer_(na); // same file → newest first
     })
   );
+
+  // Deduplicate: the sort put the newest version first, so keep only the first
+  // occurrence of each base name — older versions (v1, v2…) are discarded.
+  Object.keys(groups).forEach(key => {
+    const seen = new Set();
+    groups[key] = groups[key].filter(f => {
+      const base = extractKALBaseName(f.getName());
+      if (seen.has(base)) return false;
+      seen.add(base);
+      return true;
+    });
+  });
+
   return groups;
 }
 
