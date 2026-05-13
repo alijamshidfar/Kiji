@@ -1851,14 +1851,14 @@ function rebuildFormatHeader_(sheet) {
         return;
       }
       console.log('Logo inserted successfully (contentType=' + ct + ')');
-      // Resize after insertion — insertImage may return void in some runtimes
+      // Resize and centre — insertImage may return void in some runtimes so find via getImages()
       try {
-        SpreadsheetApp.flush();
         const imgs = sheet.getImages().filter(i => i.getAnchorCell().getRow() === 1);
-        console.log('Images found in row 1 after insert: ' + imgs.length);
         if (imgs.length > 0) {
-          imgs[0].setWidth(48).setHeight(48);
-          console.log('Logo resized to 48x48. Actual w=' + imgs[0].getWidth() + ' h=' + imgs[0].getHeight());
+          const logo = imgs[0];
+          logo.setWidth(48).setHeight(48);
+          logo.setAnchorCellXOffset(11).setAnchorCellYOffset(6); // centre in 70x60 cell
+          console.log('Logo resized to 48x48 and centred');
         }
       } catch (e2) {
         console.warn('Logo resize failed (image still inserted): ' + e2.message);
