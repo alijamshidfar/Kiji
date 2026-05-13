@@ -535,6 +535,87 @@ function updateAllInfo() {
 }
 
 /**
+ * Reads filenames from col C and returns [{prefix, firstRow, lastRow}] for each
+ * consecutive run of files sharing the same drive-code prefix.  Blank rows skipped.
+ */
+function buildGroups_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) return [];
+  const n     = lastRow - DATA_START + 1;
+  const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const groups = [];
+  for (let i = 0; i < n; i++) {
+    const fn = (names[i][0] || '').toString().trim();
+    if (!fn) continue;
+    const m      = fn.match(/^([A-Za-z]{2,4})-/);
+    const prefix = m ? m[1].toUpperCase() : '??';
+    const r      = DATA_START + i;
+    if (!groups.length || groups[groups.length - 1].prefix !== prefix) {
+      groups.push({ prefix, firstRow: r, lastRow: r });
+    } else {
+      groups[groups.length - 1].lastRow = r;
+    }
+  }
+  return groups;
+}
+
+/**
+ * Finds file rows placed in the wrong group section (e.g. an OP row sitting
+ * between LP and PC rows) and moves them up to immediately after the first
+ * occurrence of that prefix.  Uses sheet.copyTo so values, formulas and
+ * formatting all transfer correctly.  Iterates until the sheet is fully
+ * consolidated (handles cascading moves).
+ *
+ * @returns {boolean} true if any rows were moved
+ */
+function consolidateMisplacedRows_(sheet) {
+  let anyMoved = false;
+
+  for (let pass = 0; pass < 10; pass++) {         // safety cap
+    const groups = buildGroups_(sheet);
+
+    // Find the LAST group index that has the same prefix as an earlier group
+    const firstIdx  = {};
+    let lastMisplaced = null;
+    for (let g = 0; g < groups.length; g++) {
+      const p = groups[g].prefix;
+      if (firstIdx[p] === undefined) {
+        firstIdx[p] = g;
+      } else {
+        lastMisplaced = { g, firstGroupIdx: firstIdx[p] };
+      }
+    }
+    if (!lastMisplaced) break;   // all groups are in correct order
+
+    const src         = groups[lastMisplaced.g];
+    const target      = groups[lastMisplaced.firstGroupIdx];
+    const insertAfter = target.lastRow;
+    const srcFirst    = src.firstRow;
+    const numRows     = src.lastRow - srcFirst + 1;
+
+    console.log('consolidateMisplacedRows_: moving ' + src.prefix +
+      ' rows [' + srcFirst + '-' + src.lastRow + '] to after row ' + insertAfter);
+
+    // 1. Open a gap at the target position (all rows > insertAfter shift DOWN)
+    sheet.insertRowsAfter(insertAfter, numRows);
+
+    // 2. Source has shifted down by numRows because insertAfter < srcFirst
+    const shiftedSrc = srcFirst + numRows;
+
+    // 3. Copy everything (values, formulas, formatting) into the new gap
+    sheet.getRange(shiftedSrc, 1, numRows, COL.OWNER)
+         .copyTo(sheet.getRange(insertAfter + 1, 1, numRows, COL.OWNER));
+
+    // 4. Delete the shifted original source rows
+    sheet.deleteRows(shiftedSrc, numRows);
+
+    anyMoved = true;
+  }
+
+  return anyMoved;
+}
+
+/**
  * After each audit, guarantees exactly 3 blank rows between drive-code groups
  * and after the last group.  When a user fills a blank separator row with a
  * new filename, the next Sync call inserts the missing blank rows and
