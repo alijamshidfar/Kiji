@@ -611,7 +611,7 @@ function consolidateMisplacedRows_(sheet) {
   for (let pass = 0; pass < 10; pass++) {         // safety cap
     const groups = buildGroups_(sheet);
 
-    // Find the LAST group index that has the same prefix as an earlier group
+    // ── Check 1: same prefix appears in multiple separate blocks → merge them ──
     const firstIdx  = {};
     let lastMisplaced = null;
     for (let g = 0; g < groups.length; g++) {
@@ -622,31 +622,61 @@ function consolidateMisplacedRows_(sheet) {
         lastMisplaced = { g, firstGroupIdx: firstIdx[p] };
       }
     }
-    if (!lastMisplaced) break;   // all groups are in correct order
+    if (lastMisplaced) {
+      const src         = groups[lastMisplaced.g];
+      const target      = groups[lastMisplaced.firstGroupIdx];
+      const insertAfter = target.lastRow;
+      const srcFirst    = src.firstRow;
+      const numRows     = src.lastRow - srcFirst + 1;
 
-    const src         = groups[lastMisplaced.g];
-    const target      = groups[lastMisplaced.firstGroupIdx];
-    const insertAfter = target.lastRow;
-    const srcFirst    = src.firstRow;
-    const numRows     = src.lastRow - srcFirst + 1;
+      console.log('consolidateMisplacedRows_: merging duplicate ' + src.prefix +
+        ' rows [' + srcFirst + '-' + src.lastRow + '] to after row ' + insertAfter);
 
-    console.log('consolidateMisplacedRows_: moving ' + src.prefix +
-      ' rows [' + srcFirst + '-' + src.lastRow + '] to after row ' + insertAfter);
+      sheet.insertRowsAfter(insertAfter, numRows);
+      const shiftedSrc = srcFirst + numRows; // target is above src, so src shifts down
+      sheet.getRange(shiftedSrc, 1, numRows, COL.OWNER)
+           .copyTo(sheet.getRange(insertAfter + 1, 1, numRows, COL.OWNER));
+      sheet.deleteRows(shiftedSrc, numRows);
+      anyMoved = true;
+      continue;
+    }
 
-    // 1. Open a gap at the target position (all rows > insertAfter shift DOWN)
-    sheet.insertRowsAfter(insertAfter, numRows);
+    // ── Check 2: unknown prefix appears before a known-prefix group → move it down ──
+    // Find the last row that belongs to any known (REBUILD_PREFIX_ORDER) group.
+    let lastKnownRow = -1;
+    for (let g = groups.length - 1; g >= 0; g--) {
+      if (REBUILD_PREFIX_ORDER.includes(groups[g].prefix)) {
+        lastKnownRow = groups[g].lastRow;
+        break;
+      }
+    }
+    if (lastKnownRow > 0) {
+      let unknownEarlyIdx = -1;
+      for (let g = 0; g < groups.length; g++) {
+        if (!REBUILD_PREFIX_ORDER.includes(groups[g].prefix) &&
+            groups[g].lastRow < lastKnownRow) {
+          unknownEarlyIdx = g;
+          break;
+        }
+      }
+      if (unknownEarlyIdx >= 0) {
+        const src     = groups[unknownEarlyIdx];
+        const numRows = src.lastRow - src.firstRow + 1;
 
-    // 2. Source has shifted down by numRows because insertAfter < srcFirst
-    const shiftedSrc = srcFirst + numRows;
+        console.log('consolidateMisplacedRows_: moving unknown prefix ' + src.prefix +
+          ' rows [' + src.firstRow + '-' + src.lastRow + '] to after row ' + lastKnownRow);
 
-    // 3. Copy everything (values, formulas, formatting) into the new gap
-    sheet.getRange(shiftedSrc, 1, numRows, COL.OWNER)
-         .copyTo(sheet.getRange(insertAfter + 1, 1, numRows, COL.OWNER));
+        // Target (lastKnownRow) is BELOW src, so insertRowsAfter does not shift src.
+        sheet.insertRowsAfter(lastKnownRow, numRows);
+        sheet.getRange(src.firstRow, 1, numRows, COL.OWNER)
+             .copyTo(sheet.getRange(lastKnownRow + 1, 1, numRows, COL.OWNER));
+        sheet.deleteRows(src.firstRow, numRows);
+        anyMoved = true;
+        continue;
+      }
+    }
 
-    // 4. Delete the shifted original source rows
-    sheet.deleteRows(shiftedSrc, numRows);
-
-    anyMoved = true;
+    break; // nothing left to fix
   }
 
   return anyMoved;
