@@ -630,10 +630,22 @@ function maintainGroupSpacing_(sheet) {
       }
     }
 
+    const summary = groups.map(g =>
+      g.prefix + '[' + g.firstRow + '-' + g.lastRow + ']'
+    ).join(', ');
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      'Groups: ' + (groups.length ? summary : 'none') +
+      '\nRows inserted: ' + totalInserted,
+      '🔧 Spacing Check', 6
+    );
     console.log('maintainGroupSpacing_: done — ' + totalInserted + ' row(s) inserted');
     return totalInserted;
 
   } catch (e) {
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      'maintainGroupSpacing_ ERROR:\n' + e.message,
+      '❌ Spacing Error', 8
+    );
     console.error('maintainGroupSpacing_ ERROR: ' + e.message + '\nStack: ' + e.stack);
     return 0;
   }
