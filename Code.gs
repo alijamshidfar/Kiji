@@ -1217,12 +1217,14 @@ function rebuildRegistryFromDrive() {
     });
   });
 
-  // 6. Final blue separator row
+  // 6. 3 blank rows then final blue separator row
+  r += 3;
   rebuildWriteSeparator_(sheet, r);
 
-  // 7. Freeze row 1 and col A
+  // 7. Freeze row 1 and col A, then auto-fit all columns
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
+  sheet.autoResizeColumns(1, COL.OWNER);
 
   renumberAllRows_(sheet);
 
@@ -1256,11 +1258,27 @@ function rebuildCollectGroups_() {
     } catch (_) {}
   });
 
-  // Sort each group alphabetically by filename
+  // Sort within each group: entity code → doc type → version descending (newest first)
   Object.values(groups).forEach(arr =>
-    arr.sort((a, b) => a.getName().localeCompare(b.getName()))
+    arr.sort((a, b) => {
+      const na = a.getName(), nb = b.getName();
+      const pa = na.split('_'),  pb = nb.split('_');
+      const ea = (pa[0] || '').split('-')[1] || '';
+      const eb = (pb[0] || '').split('-')[1] || '';
+      if (ea !== eb) return ea.localeCompare(eb);
+      const da = pa[1] || '', db = pb[1] || '';
+      if (da !== db) return da.localeCompare(db);
+      return rebuildExtractVer_(nb) - rebuildExtractVer_(na); // newest first
+    })
   );
   return groups;
+}
+
+/** Extracts numeric version from a KAL filename for sort comparison. */
+function rebuildExtractVer_(name) {
+  if (/vFINAL$/i.test(name)) return 9999;
+  const m = name.match(/_v(\d+)(?:_\d{8})?$/i);
+  return m ? parseInt(m[1], 10) : 1;
 }
 
 /** Writes one Drive file's data into a registry row. */
@@ -1301,21 +1319,32 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
 
   // Write plain values and reset background to white (row may follow a blue separator)
   const rowRange = sheet.getRange(r, 1, 1, COL.OWNER);
-  rowRange.setBackground(null).setValues([[
-    '',          // A: row number (renumberAllRows_ fills this)
-    humanDesc,   // B: human-readable description
-    name,        // C: filename
-    formatMimeType(mime), // D: file type
-    version,     // E: current version
-    '',          // F: current folder (hyperlink set below)
-    '',          // G: link (hyperlink set below)
-    forWho,      // H: for who
-    '',          // I: KAL name check (filled by Audit & Sync)
-    '',          // J: destination drive
-    '',          // K: preferred template
-    '',          // L: abstract
-    ''           // M: owner
-  ]]);
+  rowRange.setBackground(null)
+          .setFontColor(null)
+          .setFontWeight('normal')
+          .setHorizontalAlignment('left')
+          .setValues([[
+            '',          // A: row number
+            humanDesc,   // B: human-readable description
+            name,        // C: filename
+            formatMimeType(mime), // D: file type
+            version,     // E: current version
+            '',          // F: current folder (hyperlink set below)
+            '',          // G: link (hyperlink set below)
+            forWho,      // H: for who
+            '',          // I: KAL name check
+            '',          // J: destination drive
+            '',          // K: preferred template
+            '',          // L: abstract
+            ''           // M: owner
+          ]]);
+
+  // Center-align specific columns: row number, filename, file type, version, for who
+  sheet.getRange(r, COL.ROW_NUM).setHorizontalAlignment('center');
+  sheet.getRange(r, COL.FILENAME).setHorizontalAlignment('center');
+  sheet.getRange(r, COL.FILETYPE).setHorizontalAlignment('center');
+  sheet.getRange(r, COL.VERSION).setHorizontalAlignment('center');
+  sheet.getRange(r, COL.FOR_WHO).setHorizontalAlignment('center');
 
   // Hyperlinks
   if (folderUrl) {
