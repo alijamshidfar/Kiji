@@ -540,6 +540,9 @@ function updateAllInfo() {
  * new filename, the next Sync call inserts the missing blank rows and
  * re-applies the navy col-A styling and red separator border.
  *
+ * Also detects rows placed in the wrong section (e.g. an OP row inserted
+ * between LP and PC rows) and moves them to the correct group automatically.
+ *
  * Processes boundaries bottom-to-top so insertions at one boundary never
  * invalidate the row numbers captured for boundaries higher up the sheet.
  *
@@ -547,27 +550,14 @@ function updateAllInfo() {
  */
 function maintainGroupSpacing_(sheet) {
   try {
-    const lastRow = sheet.getLastRow();
-    if (lastRow < DATA_START) return 0;
+    if (sheet.getLastRow() < DATA_START) return 0;
 
-    const n     = lastRow - DATA_START + 1;
-    const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+    // First, move any rows that are in the wrong section to their correct group.
+    // (e.g. an OP file placed between LP and PC rows.)
+    consolidateMisplacedRows_(sheet);
 
-    // Build consecutive groups by drive-code prefix (skip blank rows)
-    const groups = []; // [{prefix, firstRow, lastRow}]
-    for (let i = 0; i < n; i++) {
-      const fn     = (names[i][0] || '').toString().trim();
-      if (!fn) continue;
-      // Match both uppercase (OP-) and allow mixed-case input (normalise to upper)
-      const prefixMatch = fn.match(/^([A-Za-z]{2,4})-/);
-      const prefix = prefixMatch ? prefixMatch[1].toUpperCase() : '??';
-      const r      = DATA_START + i;
-      if (!groups.length || groups[groups.length - 1].prefix !== prefix) {
-        groups.push({ prefix, firstRow: r, lastRow: r });
-      } else {
-        groups[groups.length - 1].lastRow = r;
-      }
-    }
+    // Build groups fresh (consolidation may have moved rows).
+    const groups = buildGroups_(sheet);
 
     console.log('maintainGroupSpacing_: detected ' + groups.length + ' group(s): ' +
       groups.map(g => g.prefix + '[' + g.firstRow + '-' + g.lastRow + ']').join(', '));
