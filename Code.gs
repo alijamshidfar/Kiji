@@ -147,6 +147,10 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
 
   // ── Empty row ─────────────────────────────────────────────────────────────
   if (!baseName) {
+    // Preserve separator rows (header-blue background) — touch nothing
+    const rowBg = sheet.getRange(r, COL.DESC).getBackground();
+    if (rowBg.toLowerCase() === HEADER_BLUE.toLowerCase()) return HEADER_BLUE;
+
     sheet.getRange(r, COL.ROW_NUM, 1, 2).clearContent();
     sheet.getRange(r, COL.FILETYPE, 1, LAST_COL - COL.FILETYPE + 1).clearContent();
     dropdownCell.clearDataValidations();
@@ -443,8 +447,10 @@ function getLevelsData() {
  * after the loop (N×11 individual calls → 3 batch calls).
  */
 function updateAllInfo() {
-  const ss      = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet   = ss.getActiveSheet();
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
   const lastRow = sheet.getLastRow();
   if (lastRow < DATA_START) return;
 
@@ -454,12 +460,23 @@ function updateAllInfo() {
 
   const numRows   = lastRow - DATA_START + 1;
   const fileNames = sheet.getRange(DATA_START, COL.FILENAME, numRows, 1).getValues();
-  const bgColors  = [];
-  let seq = 0, errors = 0;
+
+  // Read existing backgrounds so separator rows (HEADER_BLUE, no filename) are preserved
+  const existingBgs = sheet.getRange(DATA_START, COL.DESC, numRows, 1).getBackgrounds();
+
+  const bgColors = [];
+  let errors = 0;
 
   for (let i = 0; i < numRows; i++) {
     const r        = DATA_START + i;
     const baseName = String(fileNames[i][0]).trim();
+
+    // Separator row: no filename and background matches the header blue — skip audit
+    if (!baseName && existingBgs[i][0].toLowerCase() === HEADER_BLUE.toLowerCase()) {
+      bgColors.push(Array(LAST_COL - COL.DESC + 1).fill(HEADER_BLUE));
+      continue;
+    }
+
     try {
       const color = processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList, baseName, false);
       bgColors.push(Array(LAST_COL - COL.DESC + 1).fill(color));
@@ -481,7 +498,7 @@ function updateAllInfo() {
 
 function updateSelectedInfo() {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET.REGISTRY);
     const r     = sheet.getActiveRange().getRow();
     if (r < DATA_START) return;
     const data         = getLevelsData();
