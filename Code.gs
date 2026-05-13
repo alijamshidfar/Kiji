@@ -39,7 +39,6 @@ function onOpen() {
     // ── Maintenance sub-menu ────────────────────────────────────────────────
     .addSubMenu(ui.createMenu('🧹 Maintenance')
       .addItem('🔁 Rebuild Registry from Drive', 'rebuildRegistryFromDrive')
-      .addItem('🖼️ Set Logo from Drive',          'setupLogoFromDrive')
       .addSeparator()
       .addItem('🧹 Keep Only Latest Version', 'keepOnlyLatestVersion')
       .addItem('📦 Archive Older Versions',   'archiveOlderVersions')
@@ -1243,8 +1242,10 @@ function rebuildRegistryFromDrive() {
   // 5. Write file rows; red border line between groups (no colored row)
   let r = DATA_START;
   let lastFileRow = -1;
+  const blankRows = []; // track blank separator rows to give them a thin height
   renderOrder.forEach((prefix, idx) => {
     if (idx > 0) {
+      for (let b = 0; b < 3; b++) blankRows.push(r + b);
       r += 3; // 3 blank rows between groups
     }
     const groupStart = r;
@@ -1252,21 +1253,20 @@ function rebuildRegistryFromDrive() {
       rebuildWriteFileRow_(sheet, r, file);
       lastFileRow = r++;
     });
-    // Red TOP border on first row of each group (except the very first) — marks start of drive section
+    // Red TOP border on first row of each group (except the very first)
     if (idx > 0 && groupStart < r) {
       sheet.getRange(groupStart, 1, 1, COL.OWNER)
            .setBorder(true, null, null, null, null, null,
                       SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
     }
   });
-  // 3 blank rows with navy col A after the final group,
-  // then a red bottom border on the last blank row to close the registry section.
+  // 3 trailing blank rows with navy col A + red bottom border to close the registry
   if (lastFileRow >= DATA_START) {
     for (let b = 1; b <= 3; b++) {
+      blankRows.push(lastFileRow + b);
       sheet.getRange(lastFileRow + b, COL.ROW_NUM)
            .setBackground(HEADER_BLUE).setValue('');
     }
-    // Red bottom border on the 3rd trailing blank row — mirrors the inter-group separators
     sheet.getRange(lastFileRow + 3, 1, 1, COL.OWNER)
          .setBorder(null, null, true, null, null, null,
                     SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
@@ -1280,14 +1280,15 @@ function rebuildRegistryFromDrive() {
 
   renumberAllRows_(sheet);
 
-  // Clip Abstract column text and lock row heights — without this the long
-  // AI formula in col L wraps and auto-expands every row after clear().
+  // Clip Abstract column and set row heights.
+  // File rows → 21 px; blank separator rows → 8 px (thin visual gap).
   const lastWritten = sheet.getLastRow();
   if (lastWritten >= DATA_START) {
     const dataRows = lastWritten - DATA_START + 1;
     sheet.getRange(DATA_START, COL.ABSTRACT, dataRows, 1)
          .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     sheet.setRowHeights(DATA_START, dataRows, 21);
+    blankRows.forEach(row => sheet.setRowHeight(row, 8));
   }
 
   const total = renderOrder.reduce((n, p) => n + (groups[p] || []).length, 0);
@@ -1466,78 +1467,34 @@ function rebuildFormatHeader_(sheet) {
 
   sheet.setRowHeight(1, 60);
 
-  // Insert Kiji logo into A1 — PNG preferred (supported by Sheets)
-  // Source priority: KAL_LOGO_PNG_BASE64 constant → PropertiesService (set via setupLogoFromDrive)
-  const logoB64 = KAL_LOGO_PNG_BASE64 ||
-    PropertiesService.getScriptProperties().getProperty('KAL_LOGO_PNG_B64') || '';
-  if (logoB64) {
-    try {
-      const decoded = Utilities.base64Decode(logoB64);
-      const blob    = Utilities.newBlob(decoded, 'image/png', 'kiji-logo.png');
-      sheet.insertImage(blob, 1, 1, 4, 4);
-    } catch (e) {
-      console.warn('Logo insert skipped: ' + e.message);
-    }
+  // Insert Kiji logo into A1.
+  // Priority: KAL_LOGO_PNG_BASE64 constant → Settings tab D2 (Drive link or direct URL)
+  const blob = rebuildGetLogoBlobFromSettings_() ||
+    (KAL_LOGO_PNG_BASE64
+      ? Utilities.newBlob(Utilities.base64Decode(KAL_LOGO_PNG_BASE64), 'image/png', 'kiji-logo.png')
+      : null);
+  if (blob) {
+    try { sheet.insertImage(blob, 1, 1, 4, 4); }
+    catch (e) { console.warn('Logo insert skipped: ' + e.message); }
   }
 }
 
-// ── Logo Setup ────────────────────────────────────────────────────────────────
-
-/**
- * One-time setup: read a PNG from Google Drive and store it in ScriptProperties
- * so rebuildFormatHeader_ can embed it as the A1 logo.
- *
- * How to use:
- *  1. Upload your logo PNG to Google Drive (any folder).
- *  2. Open the file in Drive, copy the file ID from the URL
- *     (the long string between /d/ and /view in the share link).
- *  3. Run "Set Logo from Drive" from the KAL File System menu.
- *  4. Paste the file ID when prompted.
- *  5. Re-run "Rebuild Registry from Drive" — the logo will appear in A1.
- *
- * Tip: for best results use a PNG with a TRANSPARENT background so it blends
- * with the navy (#111184) header row.  A white-background PNG will show as a
- * white rectangle over the dark header.
- */
-function setupLogoFromDrive() {
-  const ui  = SpreadsheetApp.getUi();
-  const res = ui.prompt(
-    '🖼️ Set Registry Logo',
-    'Paste the Google Drive FILE ID of your logo PNG:\n\n' +
-    '(Find it in the share URL — the long string between /d/ and /view)',
-    ui.ButtonSet.OK_CANCEL
-  );
-  if (res.getSelectedButton() !== ui.Button.OK) return;
-
-  const fileId = res.getResponseText().trim();
-  if (!fileId) { ui.alert('No file ID entered.'); return; }
-
+/** Reads logo blob from Settings!D2 (Drive share link or direct image URL). */
+function rebuildGetLogoBlobFromSettings_() {
   try {
-    const file    = DriveApp.getFileById(fileId);
-    const blob    = file.getBlob();
-    const mime    = blob.getContentType();
-
-    if (!mime.startsWith('image/')) {
-      ui.alert('The file does not appear to be an image (MIME: ' + mime + ').\nPlease upload a PNG.');
-      return;
-    }
-
-    const bytes  = blob.getBytes();
-    const b64    = Utilities.base64Encode(bytes);
-
-    PropertiesService.getScriptProperties().setProperty('KAL_LOGO_PNG_B64', b64);
-
-    ui.alert(
-      '✅ Logo stored!',
-      'Logo saved from "' + file.getName() + '".\n\n' +
-      (mime !== 'image/png'
-        ? '⚠️  Note: file is ' + mime + ' — PNG works best for Sheets.\n\n'
-        : '') +
-      'Run "Rebuild Registry from Drive" to apply it.',
-      ui.ButtonSet.OK
-    );
+    const ss       = SpreadsheetApp.getActiveSpreadsheet();
+    const settings = ss.getSheetByName(SHEET.SETTINGS);
+    if (!settings) return null;
+    const cell = settings.getRange('D2');
+    const url  = cell.getRichTextValue().getLinkUrl() || cell.getValue().toString().trim();
+    if (!url) return null;
+    // Google Drive share link → extract file ID and use DriveApp (avoids auth issues)
+    const driveId = (url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/) || [])[1];
+    if (driveId) return DriveApp.getFileById(driveId).getBlob();
+    // Direct image URL fallback
+    return UrlFetchApp.fetch(url).getBlob();
   } catch (e) {
-    ui.alert('❌ Error reading file: ' + e.message +
-             '\n\nMake sure the file ID is correct and the file is accessible to this script.');
+    console.warn('Logo from Settings skipped: ' + e.message);
+    return null;
   }
 }
