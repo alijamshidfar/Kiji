@@ -750,25 +750,24 @@ function maintainGroupSpacing_(sheet) {
     }
 
     // ── Trailing blank rows after the last group ──────────────────────────────
-    // Batch-read filenames to find the last file row without per-row getValue() calls.
-    const curLast = sheet.getLastRow();
-    const nTotal  = curLast - DATA_START + 1;
-    const allNames = sheet.getRange(DATA_START, COL.FILENAME, nTotal, 1).getValues();
-    let lastFileRow = DATA_START - 1;
-    for (let i = nTotal - 1; i >= 0; i--) {
-      if (allNames[i][0]) { lastFileRow = DATA_START + i; break; }
+    // getLastRow() skips content-less rows (background-only), so trailing
+    // separator rows are invisible to it. Probe col A backgrounds instead.
+    const lastFileRow = groups[groups.length - 1].lastRow;
+    const probeCount  = SEP_BLANK_ROWS * 2;
+    const trailBgs    = sheet.getRange(lastFileRow + 1, COL.ROW_NUM, probeCount, 1).getBackgrounds();
+    let trailBlanks   = 0;
+    while (trailBlanks < probeCount &&
+           trailBgs[trailBlanks][0].toLowerCase() === HEADER_BLUE.toLowerCase()) {
+      trailBlanks++;
     }
 
-    if (lastFileRow >= DATA_START) {
-      const trailBlanks = curLast - lastFileRow;
-      if (trailBlanks < SEP_BLANK_ROWS) {
-        sheet.insertRowsAfter(curLast, SEP_BLANK_ROWS - trailBlanks);
-      } else if (trailBlanks > SEP_BLANK_ROWS) {
-        sheet.deleteRows(lastFileRow + SEP_BLANK_ROWS + 1, trailBlanks - SEP_BLANK_ROWS);
-      }
-      styleNewBlankRows_(sheet, lastFileRow + 1, SEP_BLANK_ROWS);
-      stampSeparatorBorder_(sheet, lastFileRow, SEP_BLANK_ROWS);
+    if (trailBlanks < SEP_BLANK_ROWS) {
+      sheet.insertRowsAfter(lastFileRow + trailBlanks, SEP_BLANK_ROWS - trailBlanks);
+    } else if (trailBlanks > SEP_BLANK_ROWS) {
+      sheet.deleteRows(lastFileRow + SEP_BLANK_ROWS + 1, trailBlanks - SEP_BLANK_ROWS);
     }
+    styleNewBlankRows_(sheet, lastFileRow + 1, SEP_BLANK_ROWS);
+    stampSeparatorBorder_(sheet, lastFileRow, SEP_BLANK_ROWS);
 
     if (totalInserted > 0 || consolidated) {
       console.log('maintainGroupSpacing_: done — ' + totalInserted +
