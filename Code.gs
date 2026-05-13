@@ -1572,7 +1572,7 @@ function rebuildRegistryFromDrive() {
   // 6. Freeze, set specific column widths
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
-  [40, 260, 360, 65, 65, 110, 50, 50, 188, 110, 130, 420, 80]
+  [70, 260, 360, 65, 65, 110, 50, 50, 188, 110, 130, 420, 80]
     .forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   renumberAllRows_(sheet);
@@ -1843,7 +1843,7 @@ function rebuildFormatHeader_(sheet) {
       console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
     } else {
       try {
-        sheet.insertImage(blob, 1, 1).setWidth(160).setHeight(60);
+        sheet.insertImage(blob, 1, 1).setWidth(60).setHeight(60);
         console.log('Logo inserted successfully (contentType=' + ct + ')');
       } catch (e) {
         SpreadsheetApp.getActiveSpreadsheet().toast(
