@@ -1853,8 +1853,13 @@ function rebuildFormatHeader_(sheet) {
       console.log('Logo inserted successfully (contentType=' + ct + ')');
       // Resize after insertion — insertImage may return void in some runtimes
       try {
+        SpreadsheetApp.flush();
         const imgs = sheet.getImages().filter(i => i.getAnchorCell().getRow() === 1);
-        if (imgs.length > 0) imgs[0].setWidth(60).setHeight(60);
+        console.log('Images found in row 1 after insert: ' + imgs.length);
+        if (imgs.length > 0) {
+          imgs[0].setWidth(60).setHeight(60);
+          console.log('Logo resized to 60x60. Actual w=' + imgs[0].getWidth() + ' h=' + imgs[0].getHeight());
+        }
       } catch (e2) {
         console.warn('Logo resize failed (image still inserted): ' + e2.message);
       }
