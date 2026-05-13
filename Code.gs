@@ -14,6 +14,11 @@
  * KAL_LOGO_BASE64) live in Constants.gs.
  */
 
+// ── Row / spacing dimensions (also declared in Constants.gs) ─────────────────
+const ROW_HEIGHT_FILE = 21;  // px — data file rows
+const ROW_HEIGHT_SEP  = 20;  // px — blank separator rows between groups
+const SEP_BLANK_ROWS  = 3;   // blank rows required between each drive-code group
+
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 function onOpen() {
