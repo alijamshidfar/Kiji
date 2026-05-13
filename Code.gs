@@ -1248,17 +1248,22 @@ function rebuildRegistryFromDrive() {
                       SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
     }
   });
-  // Red bottom border after the last group
+  // Red bottom border after the last group + 3 blank navy rows
   if (lastFileRow >= DATA_START) {
     sheet.getRange(lastFileRow, 1, 1, COL.OWNER)
          .setBorder(null, null, true, null, null, null,
                     SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    // 3 blank rows with navy col A after the final group
+    for (let b = 1; b <= 3; b++) {
+      sheet.getRange(lastFileRow + b, COL.ROW_NUM)
+           .setBackground(HEADER_BLUE).setValue('');
+    }
   }
 
   // 6. Freeze, set specific column widths
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
-  [40, 260, 360, 65, 65, 110, 50, 50, 150, 110, 130, 280, 80]
+  [40, 260, 360, 65, 65, 110, 50, 50, 150, 110, 130, 420, 80]
     .forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   renumberAllRows_(sheet);
@@ -1386,6 +1391,9 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
        .setFontWeight('bold')
        .setHorizontalAlignment('center');
 
+  // Center Current Version (col E)
+  sheet.getRange(r, COL.VERSION).setHorizontalAlignment('center');
+
   // Hyperlinks
   if (folderUrl) {
     const safeFolder = folderName.replace(/"/g, "'");
@@ -1436,21 +1444,15 @@ function rebuildFormatHeader_(sheet) {
 
   sheet.setRowHeight(1, 60);
 
-  // Insert Kiji logo into A1 — try cell image first, fall back to over-grid blob
-  if (KAL_LOGO_BASE64) {
+  // Insert Kiji logo into A1 — PNG preferred (supported by Sheets); SVG as fallback
+  const logoB64 = KAL_LOGO_PNG_BASE64 || '';
+  if (logoB64) {
     try {
-      const decoded = Utilities.base64Decode(KAL_LOGO_BASE64);
-      const blob    = Utilities.newBlob(decoded, 'image/svg+xml', 'kiji-logo.svg');
+      const decoded = Utilities.base64Decode(logoB64);
+      const blob    = Utilities.newBlob(decoded, 'image/png', 'kiji-logo.png');
       sheet.insertImage(blob, 1, 1, 4, 4);
     } catch (e) {
-      try {
-        const dataUrl = 'data:image/svg+xml;base64,' + KAL_LOGO_BASE64;
-        sheet.getRange(1, 1).setValue(
-          SpreadsheetApp.newCellImage().setSourceUrl(dataUrl).build()
-        );
-      } catch (e2) {
-        console.warn('Logo insert skipped: ' + e2.message);
-      }
+      console.warn('Logo insert skipped: ' + e.message);
     }
   }
 }
