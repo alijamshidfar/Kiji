@@ -1209,11 +1209,13 @@ function rebuildRegistryFromDrive() {
   // 1. Format header row
   rebuildFormatHeader_(sheet);
 
-  // 2. Clear existing data
-  const lastRow = sheet.getLastRow();
-  if (lastRow >= DATA_START) {
-    sheet.getRange(DATA_START, 1, lastRow - DATA_START + 1, COL.OWNER).clear();
-  }
+  // 2. Clear existing data + a 200-row buffer beyond getLastRow()
+  //    (border-only rows have no cell content so getLastRow() misses them,
+  //     leaving stale red lines from previous rebuilds — the buffer catches those)
+  const lastRow    = sheet.getLastRow();
+  const clearStart = DATA_START;
+  const clearCount = Math.max(lastRow >= DATA_START ? lastRow - DATA_START + 1 : 0, 200);
+  sheet.getRange(clearStart, 1, clearCount, COL.OWNER).clear();
 
   // 3. Collect Drive files grouped by drive-code prefix
   const groups = rebuildCollectGroups_();
