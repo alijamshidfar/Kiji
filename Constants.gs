@@ -47,7 +47,7 @@ const SEPARATOR_RED = '#cc0000'; // red separator rows between drive-code groups
 
 // Drive-code prefix order for rebuildRegistryFromDrive()
 // Edit this array to change the grouping order. Unknown codes follow, sorted.
-const REBUILD_PREFIX_ORDER = ['OP', 'KAL', 'LP', 'PC'];
+const REBUILD_PREFIX_ORDER = ['OP', 'LP', 'PC'];
 
 // ── KAL logo ─────────────────────────────────────────────────────────────────
 // KAL_LOGO_PNG_BASE64: paste the base64 of your PNG here — used in the sheet header (A1).
