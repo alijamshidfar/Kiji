@@ -740,15 +740,12 @@ function maintainGroupSpacing_(sheet) {
         const needed = SEP_BLANK_ROWS - blanks;
         sheet.insertRowsAfter(endRow, needed);
         totalInserted += needed;
-        styleNewBlankRows_(sheet, endRow + 1, needed);
-        if (blanks > 0) {
-          styleNewBlankRows_(sheet, endRow + needed + 1, blanks);
-        }
       } else if (blanks > SEP_BLANK_ROWS) {
         sheet.deleteRows(endRow + 1, blanks - SEP_BLANK_ROWS);
         groups[g + 1].firstRow -= (blanks - SEP_BLANK_ROWS);
       }
 
+      styleNewBlankRows_(sheet, endRow + 1, SEP_BLANK_ROWS);
       stampSeparatorBorder_(sheet, endRow, SEP_BLANK_ROWS);
     }
 
@@ -765,18 +762,11 @@ function maintainGroupSpacing_(sheet) {
     if (lastFileRow >= DATA_START) {
       const trailBlanks = curLast - lastFileRow;
       if (trailBlanks < SEP_BLANK_ROWS) {
-        const needed = SEP_BLANK_ROWS - trailBlanks;
-        sheet.insertRowsAfter(curLast, needed);
-        styleNewBlankRows_(sheet, curLast + 1, needed);
-        if (trailBlanks > 0) {
-          styleNewBlankRows_(sheet, lastFileRow + 1, trailBlanks);
-        }
+        sheet.insertRowsAfter(curLast, SEP_BLANK_ROWS - trailBlanks);
       } else if (trailBlanks > SEP_BLANK_ROWS) {
         sheet.deleteRows(lastFileRow + SEP_BLANK_ROWS + 1, trailBlanks - SEP_BLANK_ROWS);
-        styleNewBlankRows_(sheet, lastFileRow + 1, SEP_BLANK_ROWS);
-      } else {
-        styleNewBlankRows_(sheet, lastFileRow + 1, SEP_BLANK_ROWS);
       }
+      styleNewBlankRows_(sheet, lastFileRow + 1, SEP_BLANK_ROWS);
       stampSeparatorBorder_(sheet, lastFileRow, SEP_BLANK_ROWS);
     }
 
