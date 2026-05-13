@@ -535,6 +535,43 @@ function updateAllInfo() {
 }
 
 /**
+ * Scans col C for duplicate filenames and deletes later occurrences (bottom-to-top
+ * so row-index shifts don't corrupt the loop).  The FIRST occurrence is kept —
+ * after consolidation that is the original, fully-audited row.
+ *
+ * @returns {boolean} true if any rows were deleted
+ */
+function removeDuplicateFilenames_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) return false;
+
+  const n     = lastRow - DATA_START + 1;
+  const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+
+  const seen     = new Set();
+  const toDelete = [];
+
+  for (let i = 0; i < n; i++) {
+    const fn = (names[i][0] || '').toString().trim().toLowerCase();
+    if (!fn) continue;
+    if (seen.has(fn)) {
+      toDelete.push(DATA_START + i); // mark for deletion (later occurrence)
+    } else {
+      seen.add(fn);
+    }
+  }
+
+  if (!toDelete.length) return false;
+
+  // Delete bottom-to-top so earlier row indices stay valid
+  for (let i = toDelete.length - 1; i >= 0; i--) {
+    console.log('removeDuplicateFilenames_: deleting duplicate at row ' + toDelete[i]);
+    sheet.deleteRows(toDelete[i]);
+  }
+  return true;
+}
+
+/**
  * Reads filenames from col C and returns [{prefix, firstRow, lastRow}] for each
  * consecutive run of files sharing the same drive-code prefix.  Blank rows skipped.
  */
@@ -633,11 +670,14 @@ function maintainGroupSpacing_(sheet) {
   try {
     if (sheet.getLastRow() < DATA_START) return 0;
 
-    // First, move any rows that are in the wrong section to their correct group.
-    // (e.g. an OP file placed between LP and PC rows.)
+    // 1. Move any rows that are in the wrong section to their correct group.
     consolidateMisplacedRows_(sheet);
 
-    // Build groups fresh (consolidation may have moved rows).
+    // 2. Remove duplicate filenames created by the move (e.g. user typed a
+    //    filename that already exists in the target group).
+    removeDuplicateFilenames_(sheet);
+
+    // 3. Build groups fresh (rows may have moved or been deleted above).
     const groups = buildGroups_(sheet);
 
     console.log('maintainGroupSpacing_: detected ' + groups.length + ' group(s): ' +
