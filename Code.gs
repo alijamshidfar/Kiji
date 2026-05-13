@@ -1279,7 +1279,7 @@ function rebuildRegistryFromDrive() {
   // 6. Freeze, set specific column widths
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
-  [40, 260, 360, 65, 65, 110, 50, 50, 150, 110, 130, 420, 80]
+  [40, 260, 360, 65, 65, 110, 50, 50, 188, 110, 130, 420, 80]
     .forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   renumberAllRows_(sheet);
@@ -1297,6 +1297,40 @@ function rebuildRegistryFromDrive() {
 
   // Auto-run full audit so KAL check, folder links and row colours are filled immediately
   updateAllInfo();
+
+  // Re-set all Abstract (col L) formulas after the audit so Google Sheets
+  // triggers a fresh evaluation of each =AI() call.
+  refreshAllAbstractFormulas_();
+}
+
+/**
+ * Clears col L for every file row in the Registry then re-writes the =AI() formula,
+ * forcing Google Sheets to evaluate each Abstract cell from scratch.
+ * Called automatically at the end of rebuildRegistryFromDrive; can also be
+ * run manually if abstracts are stale.
+ */
+function refreshAllAbstractFormulas_() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) return;
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) return;
+
+  const n       = lastRow - DATA_START + 1;
+  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+
+  // Build formula array — blank for separator/empty rows, =AI() for file rows
+  const formulas = fileNames.map((row, i) => {
+    const r = DATA_START + i;
+    if (!row[0]) return [''];
+    return ['=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'];
+  });
+
+  const range = sheet.getRange(DATA_START, COL.ABSTRACT, n, 1);
+  range.clearContent();
+  SpreadsheetApp.flush(); // ensure clear is committed before re-writing
+  range.setFormulas(formulas);
 }
 
 /** Searches Drive for all KAL-convention files; returns {PREFIX: [DriveFile]} map. */
