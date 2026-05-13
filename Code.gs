@@ -1834,12 +1834,25 @@ function rebuildFormatHeader_(sheet) {
       ? Utilities.newBlob(Utilities.base64Decode(KAL_LOGO_PNG_BASE64), 'image/png', 'kiji-logo.png')
       : null) || rebuildGetLogoBlobFromSettings_();
   if (blob) {
-    try {
-      sheet.insertImage(blob, 1, 1); // anchor to A1, no pixel offset
-      console.log('Logo inserted successfully');
-    } catch (e) {
-      console.warn('Logo insertImage failed: ' + e.message);
+    const ct = blob.getContentType() || '';
+    if (ct.indexOf('svg') !== -1) {
+      SpreadsheetApp.getActiveSpreadsheet().toast(
+        'Logo file is SVG — Google Sheets only supports PNG/JPG.\n' +
+        'Upload a PNG version to Drive and update Settings!D2.',
+        '⚠️ Logo', 10);
+      console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
+    } else {
+      try {
+        sheet.insertImage(blob, 1, 1); // anchor to A1, no pixel offset
+        console.log('Logo inserted successfully (contentType=' + ct + ')');
+      } catch (e) {
+        SpreadsheetApp.getActiveSpreadsheet().toast(
+          'Logo insert failed: ' + e.message, '⚠️ Logo', 8);
+        console.warn('Logo insertImage failed: ' + e.message);
+      }
     }
+  } else {
+    console.warn('Logo: no blob — set KAL_LOGO_PNG_BASE64 or add a PNG Drive link in Settings!D2');
   }
 }
 
