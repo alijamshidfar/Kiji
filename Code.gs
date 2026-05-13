@@ -1268,6 +1268,13 @@ function rebuildRegistryFromDrive() {
 
   renumberAllRows_(sheet);
 
+  // Set a compact fixed height for all data rows — clear() resets heights to
+  // auto-expand, causing the long Abstract formula to bloat every row.
+  const lastWritten = sheet.getLastRow();
+  if (lastWritten >= DATA_START) {
+    sheet.setRowHeights(DATA_START, lastWritten - DATA_START + 1, 21);
+  }
+
   const total = renderOrder.reduce((n, p) => n + (groups[p] || []).length, 0);
   toast('Rebuild complete — ' + total + ' files. Running full audit…', '✅ Rebuilt', 4);
 
