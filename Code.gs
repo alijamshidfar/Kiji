@@ -1843,25 +1843,14 @@ function rebuildFormatHeader_(sheet) {
       console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
     } else {
       try {
-        sheet.insertImage(blob, 1, 1);
+        // PNG is pre-sized to 48x48 — inserts at correct size with no runtime resize.
+        // Offsets (11,6) centre it within the 70x60 column-A header cell.
+        sheet.insertImage(blob, 1, 1, 11, 6);
+        console.log('Logo inserted successfully (contentType=' + ct + ')');
       } catch (e) {
         SpreadsheetApp.getActiveSpreadsheet().toast(
           'Logo insert failed: ' + e.message, '⚠️ Logo', 8);
         console.warn('Logo insertImage failed: ' + e.message);
-        return;
-      }
-      console.log('Logo inserted successfully (contentType=' + ct + ')');
-      // Resize and centre — insertImage may return void in some runtimes so find via getImages()
-      try {
-        const imgs = sheet.getImages().filter(i => i.getAnchorCell().getRow() === 1);
-        if (imgs.length > 0) {
-          const logo = imgs[0];
-          logo.setWidth(48).setHeight(48);
-          logo.setAnchorCellXOffset(11).setAnchorCellYOffset(6); // centre in 70x60 cell
-          console.log('Logo resized to 48x48 and centred');
-        }
-      } catch (e2) {
-        console.warn('Logo resize failed (image still inserted): ' + e2.message);
       }
     }
   } else {
