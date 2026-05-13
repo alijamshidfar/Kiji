@@ -584,7 +584,9 @@ function maintainGroupSpacing_(sheet) {
       console.log('maintainGroupSpacing_: gap between ' + groups[g].prefix +
         ' (end=' + endRow + ') and ' + groups[g+1].prefix +
         ' (start=' + nxtRow + '): ' + blanks + ' blank row(s)');
+
       if (blanks < 3) {
+        // ── Too few blanks → insert missing rows ──────────────────────────
         const needed = 3 - blanks;
         console.log('maintainGroupSpacing_: inserting ' + needed + ' row(s) after row ' + endRow);
         sheet.insertRowsAfter(endRow, needed);
@@ -600,14 +602,32 @@ function maintainGroupSpacing_(sheet) {
           sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
           sheet.setRowHeight(endRow + b, 20);
         }
-        // Also ensure any pre-existing blank rows in this gap have consistent styling
+        // Ensure any pre-existing blank rows in this gap also have correct styling
         for (let b = needed + 1; b <= 3; b++) {
           sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
           sheet.setRowHeight(endRow + b, 20);
         }
+
+      } else if (blanks > 3) {
+        // ── Too many blanks → delete the extra rows ───────────────────────
+        // Happens when a user clears a filename that was inside the separator zone.
+        // Safe to delete because all rows between the two groups are blank.
+        const extra = blanks - 3;
+        console.log('maintainGroupSpacing_: removing ' + extra + ' extra blank row(s) after row ' + endRow);
+        sheet.deleteRows(endRow + 1, extra);
+        // nxtRow has shifted up; update the next group's firstRow so the
+        // trailing-blanks check below sees the correct sheet state.
+        groups[g + 1].firstRow -= extra;
       }
-      // Always (re-)stamp the red bottom border on the 3rd blank row so it is
-      // present whether rows were just inserted or already existed.
+
+      // Clear any stale bottom borders in the separator zone (e.g. a border left
+      // at position 4 when a file row was cleared, shifting everything up).
+      // Then re-stamp exactly one border at position 3 (bottom of 3rd blank row).
+      const sepSize = Math.max(blanks, 3);
+      for (let sb = 1; sb <= sepSize; sb++) {
+        sheet.getRange(endRow + sb, 1, 1, COL.OWNER)
+             .setBorder(null, null, false, null, null, null);
+      }
       sheet.getRange(endRow + 3, 1, 1, COL.OWNER)
            .setBorder(null, null, true, null, null, null,
                       SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
@@ -631,7 +651,12 @@ function maintainGroupSpacing_(sheet) {
           sheet.setRowHeight(trailFile + b, 20);
         }
       }
-      // Always (re-)stamp the trailing red border, whether or not rows were added.
+      // Clear stale borders then re-stamp at position 3.
+      const trailSepSize = Math.max(trailBlanks, 3);
+      for (let sb = 1; sb <= trailSepSize; sb++) {
+        sheet.getRange(trailFile + sb, 1, 1, COL.OWNER)
+             .setBorder(null, null, false, null, null, null);
+      }
       sheet.getRange(trailFile + 3, 1, 1, COL.OWNER)
            .setBorder(null, null, true, null, null, null,
                       SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
