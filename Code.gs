@@ -1843,7 +1843,7 @@ function rebuildFormatHeader_(sheet) {
       console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
     } else {
       try {
-        sheet.insertImage(blob, 1, 1); // anchor to A1, no pixel offset
+        sheet.insertImage(blob, 1, 1).setWidth(160).setHeight(60);
         console.log('Logo inserted successfully (contentType=' + ct + ')');
       } catch (e) {
         SpreadsheetApp.getActiveSpreadsheet().toast(
