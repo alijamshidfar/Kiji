@@ -39,6 +39,7 @@ function onOpen() {
     // ── Maintenance sub-menu ────────────────────────────────────────────────
     .addSubMenu(ui.createMenu('🧹 Maintenance')
       .addItem('🔁 Rebuild Registry from Drive', 'rebuildRegistryFromDrive')
+      .addItem('🖼️ Set Logo from Drive',          'setupLogoFromDrive')
       .addSeparator()
       .addItem('🧹 Keep Only Latest Version', 'keepOnlyLatestVersion')
       .addItem('📦 Archive Older Versions',   'archiveOlderVersions')
@@ -1444,8 +1445,10 @@ function rebuildFormatHeader_(sheet) {
 
   sheet.setRowHeight(1, 60);
 
-  // Insert Kiji logo into A1 — PNG preferred (supported by Sheets); SVG as fallback
-  const logoB64 = KAL_LOGO_PNG_BASE64 || '';
+  // Insert Kiji logo into A1 — PNG preferred (supported by Sheets)
+  // Source priority: KAL_LOGO_PNG_BASE64 constant → PropertiesService (set via setupLogoFromDrive)
+  const logoB64 = KAL_LOGO_PNG_BASE64 ||
+    PropertiesService.getScriptProperties().getProperty('KAL_LOGO_PNG_B64') || '';
   if (logoB64) {
     try {
       const decoded = Utilities.base64Decode(logoB64);
@@ -1454,5 +1457,66 @@ function rebuildFormatHeader_(sheet) {
     } catch (e) {
       console.warn('Logo insert skipped: ' + e.message);
     }
+  }
+}
+
+// ── Logo Setup ────────────────────────────────────────────────────────────────
+
+/**
+ * One-time setup: read a PNG from Google Drive and store it in ScriptProperties
+ * so rebuildFormatHeader_ can embed it as the A1 logo.
+ *
+ * How to use:
+ *  1. Upload your logo PNG to Google Drive (any folder).
+ *  2. Open the file in Drive, copy the file ID from the URL
+ *     (the long string between /d/ and /view in the share link).
+ *  3. Run "Set Logo from Drive" from the KAL File System menu.
+ *  4. Paste the file ID when prompted.
+ *  5. Re-run "Rebuild Registry from Drive" — the logo will appear in A1.
+ *
+ * Tip: for best results use a PNG with a TRANSPARENT background so it blends
+ * with the navy (#111184) header row.  A white-background PNG will show as a
+ * white rectangle over the dark header.
+ */
+function setupLogoFromDrive() {
+  const ui  = SpreadsheetApp.getUi();
+  const res = ui.prompt(
+    '🖼️ Set Registry Logo',
+    'Paste the Google Drive FILE ID of your logo PNG:\n\n' +
+    '(Find it in the share URL — the long string between /d/ and /view)',
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (res.getSelectedButton() !== ui.Button.OK) return;
+
+  const fileId = res.getResponseText().trim();
+  if (!fileId) { ui.alert('No file ID entered.'); return; }
+
+  try {
+    const file    = DriveApp.getFileById(fileId);
+    const blob    = file.getBlob();
+    const mime    = blob.getContentType();
+
+    if (!mime.startsWith('image/')) {
+      ui.alert('The file does not appear to be an image (MIME: ' + mime + ').\nPlease upload a PNG.');
+      return;
+    }
+
+    const bytes  = blob.getBytes();
+    const b64    = Utilities.base64Encode(bytes);
+
+    PropertiesService.getScriptProperties().setProperty('KAL_LOGO_PNG_B64', b64);
+
+    ui.alert(
+      '✅ Logo stored!',
+      'Logo saved from "' + file.getName() + '".\n\n' +
+      (mime !== 'image/png'
+        ? '⚠️  Note: file is ' + mime + ' — PNG works best for Sheets.\n\n'
+        : '') +
+      'Run "Rebuild Registry from Drive" to apply it.',
+      ui.ButtonSet.OK
+    );
+  } catch (e) {
+    ui.alert('❌ Error reading file: ' + e.message +
+             '\n\nMake sure the file ID is correct and the file is accessible to this script.');
   }
 }
