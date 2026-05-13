@@ -1843,12 +1843,20 @@ function rebuildFormatHeader_(sheet) {
       console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
     } else {
       try {
-        sheet.insertImage(blob, 1, 1).setWidth(60).setHeight(60);
-        console.log('Logo inserted successfully (contentType=' + ct + ')');
+        sheet.insertImage(blob, 1, 1);
       } catch (e) {
         SpreadsheetApp.getActiveSpreadsheet().toast(
           'Logo insert failed: ' + e.message, '⚠️ Logo', 8);
         console.warn('Logo insertImage failed: ' + e.message);
+        return;
+      }
+      console.log('Logo inserted successfully (contentType=' + ct + ')');
+      // Resize after insertion — insertImage may return void in some runtimes
+      try {
+        const imgs = sheet.getImages().filter(i => i.getAnchorCell().getRow() === 1);
+        if (imgs.length > 0) imgs[0].setWidth(60).setHeight(60);
+      } catch (e2) {
+        console.warn('Logo resize failed (image still inserted): ' + e2.message);
       }
     }
   } else {
