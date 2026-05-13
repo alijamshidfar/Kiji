@@ -515,6 +515,13 @@ function updateAllInfo() {
   sheet.getRange(DATA_START, COL.DESC, numRows, LAST_COL - COL.DESC + 1).setBackgrounds(bgColors);
   renumberAllRows_(sheet);
 
+  // Lock all data rows to a compact height — setBackgrounds above can cause
+  // Google Sheets to re-evaluate row auto-sizing and expand rows with long text.
+  const lastDataRow = sheet.getLastRow();
+  if (lastDataRow >= DATA_START) {
+    sheet.setRowHeights(DATA_START, lastDataRow - DATA_START + 1, 21);
+  }
+
   const msg = errors > 0
     ? 'Done — ' + errors + ' row(s) had errors (View → Logs).'
     : 'All ' + numRows + ' rows audited successfully.';
@@ -1268,11 +1275,14 @@ function rebuildRegistryFromDrive() {
 
   renumberAllRows_(sheet);
 
-  // Set a compact fixed height for all data rows — clear() resets heights to
-  // auto-expand, causing the long Abstract formula to bloat every row.
+  // Clip Abstract column text and lock row heights — without this the long
+  // AI formula in col L wraps and auto-expands every row after clear().
   const lastWritten = sheet.getLastRow();
   if (lastWritten >= DATA_START) {
-    sheet.setRowHeights(DATA_START, lastWritten - DATA_START + 1, 21);
+    const dataRows = lastWritten - DATA_START + 1;
+    sheet.getRange(DATA_START, COL.ABSTRACT, dataRows, 1)
+         .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
+    sheet.setRowHeights(DATA_START, dataRows, 21);
   }
 
   const total = renderOrder.reduce((n, p) => n + (groups[p] || []).length, 0);
