@@ -416,14 +416,11 @@ function renumberAllRows_(sheet) {
     const fileExists = hasFile && links[i][0] !== 'File not found';
     values.push([fileExists ? ++seq : '']);
 
-    if (hasFile) {
-      bgs.push([HEADER_BLUE]); fColors.push(['#ffffff']);
-      weights.push(['bold']);  aligns.push(['center']);
-    } else {
-      // Separator rows (red/navy bg): preserve colour; blank rows: white
-      bgs.push([null]); fColors.push([null]);
-      weights.push([null]); aligns.push(['center']);
-    }
+    // All col A cells → navy; file rows get white bold number, others stay blank
+    bgs.push([HEADER_BLUE]);
+    fColors.push(['#ffffff']);
+    weights.push([fileExists ? 'bold' : 'normal']);
+    aligns.push(['center']);
   });
 
   const colA = sheet.getRange(DATA_START, COL.ROW_NUM, n, 1);
@@ -1232,28 +1229,34 @@ function rebuildRegistryFromDrive() {
     return;
   }
 
-  // 5. Write file rows with separators between groups
+  // 5. Write file rows; red border line between groups (no colored row)
   let r = DATA_START;
+  let lastFileRow = -1;
   renderOrder.forEach((prefix, idx) => {
-    if (idx > 0) {
-      r += 3;                     // 3 blank rows
-      rebuildWriteSeparator_(sheet, r);
-      r++;
+    if (idx > 0 && lastFileRow >= DATA_START) {
+      // Thick red bottom border on last row of previous group
+      sheet.getRange(lastFileRow, 1, 1, COL.OWNER)
+           .setBorder(null, null, true, null, null, null,
+                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+      r += 3; // 3 blank rows between groups
     }
     (groups[prefix] || []).forEach(file => {
       rebuildWriteFileRow_(sheet, r, file);
-      r++;
+      lastFileRow = r++;
     });
   });
+  // Thick red bottom border after last group too
+  if (lastFileRow >= DATA_START) {
+    sheet.getRange(lastFileRow, 1, 1, COL.OWNER)
+         .setBorder(null, null, true, null, null, null,
+                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+  }
 
-  // 6. 3 blank rows then final blue separator row
-  r += 3;
-  rebuildWriteSeparator_(sheet, r);
-
-  // 7. Freeze row 1 and col A, then auto-fit all columns
+  // 6. Freeze, set specific column widths (A narrow; others balanced)
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(1);
-  sheet.autoResizeColumns(1, COL.OWNER);
+  [40, 200, 300, 65, 65, 110, 50, 50, 150, 110, 130, 200, 80]
+    .forEach((w, i) => sheet.setColumnWidth(i + 1, w));
 
   renumberAllRows_(sheet);
 
@@ -1357,8 +1360,8 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
           .setHorizontalAlignment('left')
           .setValues([[
             '',          // A: row number
-            humanDesc,   // B: human-readable description
-            name,        // C: filename
+            humanDesc,              // B: human-readable description
+            extractKALBaseName(name), // C: filename without date/version suffix
             formatMimeType(mime), // D: file type
             version,     // E: current version
             '',          // F: current folder (hyperlink set below)
@@ -1427,4 +1430,15 @@ function rebuildFormatHeader_(sheet) {
        .setWrap(true);
 
   sheet.setRowHeight(1, 60);
+
+  // Insert Kiji logo into cell A1
+  if (KAL_LOGO_BASE64) {
+    try {
+      const dataUrl = 'data:image/svg+xml;base64,' + KAL_LOGO_BASE64;
+      const image   = SpreadsheetApp.newCellImage().setSourceUrl(dataUrl).build();
+      sheet.getRange(1, 1).setValue(image);
+    } catch (e) {
+      console.warn('Logo insert skipped: ' + e.message);
+    }
+  }
 }
