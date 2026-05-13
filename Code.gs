@@ -600,11 +600,12 @@ function maintainGroupSpacing_(sheet) {
           sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
           sheet.setRowHeight(endRow + b, 14);
         }
-        // Red bottom border on the 3rd blank row (= the visual separator line)
-        sheet.getRange(endRow + 3, 1, 1, COL.OWNER)
-             .setBorder(null, null, true, null, null, null,
-                        SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
       }
+      // Always (re-)stamp the red bottom border on the 3rd blank row so it is
+      // present whether rows were just inserted or already existed.
+      sheet.getRange(endRow + 3, 1, 1, COL.OWNER)
+           .setBorder(null, null, true, null, null, null,
+                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
     }
 
     // ── Trailing blank rows after the last group ─────────────────────────────
@@ -624,10 +625,11 @@ function maintainGroupSpacing_(sheet) {
           sheet.getRange(trailFile + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
           sheet.setRowHeight(trailFile + b, 14);
         }
-        sheet.getRange(trailFile + 3, 1, 1, COL.OWNER)
-             .setBorder(null, null, true, null, null, null,
-                        SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
       }
+      // Always (re-)stamp the trailing red border, whether or not rows were added.
+      sheet.getRange(trailFile + 3, 1, 1, COL.OWNER)
+           .setBorder(null, null, true, null, null, null,
+                      SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
     }
 
     const summary = groups.map(g =>
@@ -659,6 +661,7 @@ function updateSelectedInfo() {
     const data         = getLevelsData();
     const templateList = getTemplateList();
     processAuditForRow(sheet, r, data.driveUrlLookup, data.validEntities, data.validDocs, templateList);
+    maintainGroupSpacing_(sheet);
   } catch (e) {
     toast('Audit error: ' + e.message, '⚠️ Error', 6);
   }
