@@ -1862,16 +1862,24 @@ function rebuildGetLogoBlobFromSettings_() {
     const url = getUrlFromCell(SHEET.SETTINGS, 'D2');
     if (!url) { console.warn('Logo: no URL found in Settings!D2'); return null; }
 
-    // Extract Drive file ID with a precise pattern (avoids capturing path segments)
     const driveMatch = url.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
     if (driveMatch) {
-      console.log('Logo: using Drive file ID ' + driveMatch[1]);
-      return DriveApp.getFileById(driveMatch[1]).getBlob();
+      const fileId = driveMatch[1];
+      // Fetch a scaled thumbnail (sz=s120 → ~120 px) to stay well under the
+      // 2 MB / 1 M-pixel insertImage limit. Returns a JPEG regardless of source format.
+      const thumbUrl = 'https://drive.google.com/thumbnail?id=' + fileId + '&sz=s120';
+      const resp = UrlFetchApp.fetch(thumbUrl, { muteHttpExceptions: true });
+      if (resp.getResponseCode() === 200) {
+        console.log('Logo: thumbnail fetched for Drive file ' + fileId);
+        return resp.getBlob().setName('logo.jpg');
+      }
+      console.warn('Logo: thumbnail fetch returned ' + resp.getResponseCode() + ', trying full blob');
+      return DriveApp.getFileById(fileId).getBlob();
     }
 
     // Fallback: treat as direct image URL
     console.log('Logo: fetching direct URL');
-    return UrlFetchApp.fetch(url, {muteHttpExceptions: true}).getBlob();
+    return UrlFetchApp.fetch(url, { muteHttpExceptions: true }).getBlob();
   } catch (e) {
     console.warn('Logo from Settings!D2 failed: ' + e.message);
     return null;
