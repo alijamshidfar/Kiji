@@ -1259,12 +1259,17 @@ function rebuildRegistryFromDrive() {
                       SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
     }
   });
-  // 3 blank rows with navy col A after the final group (no bottom red border)
+  // 3 blank rows with navy col A after the final group,
+  // then a red bottom border on the last blank row to close the registry section.
   if (lastFileRow >= DATA_START) {
     for (let b = 1; b <= 3; b++) {
       sheet.getRange(lastFileRow + b, COL.ROW_NUM)
            .setBackground(HEADER_BLUE).setValue('');
     }
+    // Red bottom border on the 3rd trailing blank row — mirrors the inter-group separators
+    sheet.getRange(lastFileRow + 3, 1, 1, COL.OWNER)
+         .setBorder(null, null, true, null, null, null,
+                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
   }
 
   // 6. Freeze, set specific column widths
