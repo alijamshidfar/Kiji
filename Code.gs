@@ -592,6 +592,9 @@ function maintainGroupSpacing_(sheet) {
         sheet.insertRowsAfter(endRow, needed);
         totalInserted += needed;
         for (let b = 1; b <= needed; b++) {
+          // Clear full row: inserted rows inherit the formatting of the row above,
+          // so col B–M would pick up the yellow/green background of the file row.
+          sheet.getRange(endRow + b, 2, 1, COL.OWNER - 1).setBackground(null).clearContent();
           sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
           sheet.setRowHeight(endRow + b, 14);
         }
