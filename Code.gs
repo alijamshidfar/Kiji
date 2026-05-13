@@ -147,9 +147,9 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
 
   // ── Empty row ─────────────────────────────────────────────────────────────
   if (!baseName) {
-    // Preserve separator rows (header-blue background) — touch nothing
-    const rowBg = sheet.getRange(r, COL.DESC).getBackground();
-    if (rowBg.toLowerCase() === HEADER_BLUE.toLowerCase()) return HEADER_BLUE;
+    // Preserve separator / header rows (navy or red background) — touch nothing
+    const rowBg = sheet.getRange(r, COL.DESC).getBackground().toLowerCase();
+    if (rowBg === HEADER_BLUE.toLowerCase() || rowBg === SEPARATOR_RED.toLowerCase()) return rowBg;
 
     sheet.getRange(r, COL.ROW_NUM, 1, 2).clearContent();
     sheet.getRange(r, COL.FILETYPE, 1, LAST_COL - COL.FILETYPE + 1).clearContent();
@@ -471,10 +471,13 @@ function updateAllInfo() {
     const r        = DATA_START + i;
     const baseName = String(fileNames[i][0]).trim();
 
-    // Separator row: no filename and background matches the header blue — skip audit
-    if (!baseName && existingBgs[i][0].toLowerCase() === HEADER_BLUE.toLowerCase()) {
-      bgColors.push(Array(LAST_COL - COL.DESC + 1).fill(HEADER_BLUE));
-      continue;
+    // Separator / header row: no filename and background is navy or red — preserve, skip audit
+    if (!baseName) {
+      const bg = existingBgs[i][0].toLowerCase();
+      if (bg === HEADER_BLUE.toLowerCase() || bg === SEPARATOR_RED.toLowerCase()) {
+        bgColors.push(Array(LAST_COL - COL.DESC + 1).fill(existingBgs[i][0]));
+        continue;
+      }
     }
 
     try {
@@ -1229,7 +1232,10 @@ function rebuildRegistryFromDrive() {
   renumberAllRows_(sheet);
 
   const total = renderOrder.reduce((n, p) => n + (groups[p] || []).length, 0);
-  toast('Done — ' + total + ' files across ' + renderOrder.length + ' group(s).', '✅ Rebuilt', 6);
+  toast('Rebuild complete — ' + total + ' files. Running full audit…', '✅ Rebuilt', 4);
+
+  // Auto-run full audit so KAL check, folder links and row colours are filled immediately
+  updateAllInfo();
 }
 
 /** Searches Drive for all KAL-convention files; returns {PREFIX: [DriveFile]} map. */
@@ -1339,12 +1345,12 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
             ''           // M: owner
           ]]);
 
-  // Center-align specific columns: row number, filename, file type, version, for who
-  sheet.getRange(r, COL.ROW_NUM).setHorizontalAlignment('center');
-  sheet.getRange(r, COL.FILENAME).setHorizontalAlignment('center');
-  sheet.getRange(r, COL.FILETYPE).setHorizontalAlignment('center');
-  sheet.getRange(r, COL.VERSION).setHorizontalAlignment('center');
-  sheet.getRange(r, COL.FOR_WHO).setHorizontalAlignment('center');
+  // Column A: navy background, white bold, centered row number
+  sheet.getRange(r, COL.ROW_NUM)
+       .setBackground(HEADER_BLUE)
+       .setFontColor('#ffffff')
+       .setFontWeight('bold')
+       .setHorizontalAlignment('center');
 
   // Hyperlinks
   if (folderUrl) {
@@ -1356,11 +1362,11 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
        .setFormula(`=HYPERLINK("${url}","Link")`);
 }
 
-/** Fills a full row with the header blue (blank text — visual separator). */
+/** Fills a full row with the separator red (blank text — visual group divider). */
 function rebuildWriteSeparator_(sheet, r) {
   sheet.getRange(r, 1, 1, COL.OWNER)
        .setValues([Array(COL.OWNER).fill('')])
-       .setBackground(HEADER_BLUE);
+       .setBackground(SEPARATOR_RED);
 }
 
 /**

@@ -41,8 +41,9 @@ const COLOR = Object.freeze({
   NONE:   null        // no highlight
 });
 
-// ── Header styling ───────────────────────────────────────────────────────────
-const HEADER_BLUE = '#1a56db';  // vivid royal blue matching the sheet header
+// ── Header / separator colours ───────────────────────────────────────────────
+const HEADER_BLUE  = '#111184';  // deep navy — matches sidebar --blue
+const SEPARATOR_RED = '#cc0000'; // red separator rows between drive-code groups
 
 // Drive-code prefix order for rebuildRegistryFromDrive()
 // Edit this array to change the grouping order. Unknown codes follow, sorted.
