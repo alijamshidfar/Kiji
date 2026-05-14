@@ -251,7 +251,12 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   }
 
   // ── Col L: Abstract ───────────────────────────────────────────────────────
-  sheet.getRange(r, COL.ABSTRACT).setFormula(
+  // Clear first so Sheets treats the re-written formula as new and fires =AI().
+  const abstractCell = sheet.getRange(r, COL.ABSTRACT);
+  abstractCell.clearContent();
+  SpreadsheetApp.flush();
+  abstractCell.setNumberFormat('');
+  abstractCell.setFormula(
     '=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'
   );
 
