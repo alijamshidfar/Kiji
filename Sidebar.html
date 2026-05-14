@@ -789,6 +789,31 @@
 
   <div class="section">
     <div class="section-head" onclick="toggleSection(this)">
+      <h2>⚡ Top-Level Actions</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="menu-item blue">
+        <span class="fn-name">Audit All Rows</span>
+        <span class="fn-desc">Validates every row: checks naming convention, Drive/entity/doc-type codes, searches Drive, updates cols E/F/G/I, and applies status colors. Runs as a single batch for performance.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">Audit Selected Row</span>
+        <span class="fn-desc">Same as above but only for the cursor row — much faster for a quick single-row check.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">Search Missing KAL Files</span>
+        <span class="fn-desc">Scans Drive for files starting with a registered Drive prefix (OP-, LP-, PC-, etc.) that are not yet in the Registry. Found files are inserted below their section in sorted order.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">Notify Owner</span>
+        <span class="fn-desc">Sends an email to the address in col M for the selected row, with the row's current audit status and a link to the file. Requires Gmail send permission.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
       <h2>📁 File Operations</h2>
       <span class="icon">▼</span>
     </div>
@@ -870,31 +895,6 @@
       <div class="menu-item green">
         <span class="fn-name">Toggle Done Rows</span>
         <span class="fn-desc">Shows/hides all green (vFINAL) rows so you can focus on files still in progress.</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-head" onclick="toggleSection(this)">
-      <h2>⚡ Top-Level Actions</h2>
-      <span class="icon">▼</span>
-    </div>
-    <div class="section-body">
-      <div class="menu-item blue">
-        <span class="fn-name">Audit All Rows</span>
-        <span class="fn-desc">Validates every row: checks naming convention, Drive/entity/doc-type codes, searches Drive, updates cols E/F/G/I, and applies status colors. Runs as a single batch for performance.</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Audit Selected Row</span>
-        <span class="fn-desc">Same as above but only for the cursor row — much faster for a quick single-row check.</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Search Missing KAL Files</span>
-        <span class="fn-desc">Scans Drive for files starting with a registered Drive prefix (OP-, LP-, PC-, etc.) that are not yet in the Registry. Found files are inserted below their section in sorted order.</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Notify Owner</span>
-        <span class="fn-desc">Sends an email to the address in col M for the selected row, with the row's current audit status and a link to the file. Requires Gmail send permission.</span>
       </div>
     </div>
   </div>
