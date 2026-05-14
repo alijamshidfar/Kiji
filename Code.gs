@@ -1800,9 +1800,11 @@ function rebuildFormatHeader_(sheet) {
       console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
     } else {
       try {
-        // PNG is pre-sized to 48x48 — inserts at correct size with no runtime resize.
-        // Offsets (11,6) centre it within the 70x60 column-A header cell.
-        sheet.insertImage(blob, 1, 1, 11, 6);
+        // Insert at 50×50 display size, centred in the 70×60 header cell.
+        // High-res source (800×800) downsampled to 50×50 renders crisply.
+        // Do NOT call flush() before setWidth/setHeight — that would flash the native size.
+        const img = sheet.insertImage(blob, 1, 1, 10, 5);
+        if (img) { img.setWidth(50).setHeight(50); }
         console.log('Logo inserted successfully (contentType=' + ct + ')');
       } catch (e) {
         SpreadsheetApp.getActiveSpreadsheet().toast(
