@@ -42,12 +42,16 @@ const COLOR = Object.freeze({
 });
 
 // ── Header / separator colours ───────────────────────────────────────────────
-const HEADER_BLUE  = '#111184';  // deep navy — matches sidebar --blue
+const HEADER_BLUE   = '#111184';  // deep navy — matches sidebar --blue
 const SEPARATOR_RED = '#cc0000'; // red separator rows between drive-code groups
+const PINNED_GOLD   = '#B8860B'; // dark gold — col A marker for the pinned master doc
 
 // Drive-code prefix order for rebuildRegistryFromDrive()
 // Edit this array to change the grouping order. Unknown codes follow, sorted.
 const REBUILD_PREFIX_ORDER = ['OP', 'LP', 'PC'];
+
+// The one document that is always pinned to row #1 and marked with ★.
+const PINNED_FILE_BASE = 'OP-KAL_POLICY_MasterFileRegistry';
 
 // ── KAL logo ─────────────────────────────────────────────────────────────────
 // KAL_LOGO_PNG_BASE64: PNG base64 — used in the sheet header (A1). Current image: 48×48 px (final display size — no runtime resize needed).
