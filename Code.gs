@@ -54,6 +54,13 @@ function onOpen() {
       .addItem('👁️ Toggle Done Rows',        'toggleDoneRows'))
     .addSeparator()
 
+    // ── Codes reference sub-menu ────────────────────────────────────────────
+    .addSubMenu(ui.createMenu('Show Codes')
+      .addItem('DRIVE Codes',   'showDriveCodes')
+      .addItem('ENTITY Codes',  'showEntityCodes')
+      .addItem('DOCTYPE Codes', 'showDocTypeCodes'))
+    .addSeparator()
+
     .addItem('🔔 Notify Owner',        'notifyOwner')
     .addItem('📖 Show The User Guide', 'showUserGuide')
     .addToUi();
@@ -1363,7 +1370,37 @@ function toggleDoneRows() {
   toast(shouldHide ? doneRows.length + ' finalized row(s) hidden.' : 'All rows visible.', '👁️ Toggle Done', 4);
 }
 
-// ── 9. NOTIFICATIONS ─────────────────────────────────────────────────────────
+// ── 9. CODES DISPLAY ─────────────────────────────────────────────────────────
+
+function showDriveCodes()   { _showCodesDialog('drives',   '📋 DRIVE Codes');   }
+function showEntityCodes()  { _showCodesDialog('entities', '📋 ENTITY Codes');  }
+function showDocTypeCodes() { _showCodesDialog('docTypes', '📋 DOCTYPE Codes'); }
+
+function _showCodesDialog(key, title) {
+  const data  = getAcademyCodes();
+  const items = data[key] || [];
+  const rows = items.map(item =>
+    '<tr><td><b>' + item.code + '</b></td><td>' + (item.name || '—') + '</td></tr>'
+  ).join('');
+  const html = HtmlService.createHtmlOutput(`
+    <style>
+      body{font-family:Arial,sans-serif;padding:12px;margin:0}
+      h3{margin:0 0 10px;font-size:14px;color:#1155CC}
+      table{width:100%;border-collapse:collapse}
+      td,th{padding:6px 10px;border-bottom:1px solid #eee;font-size:12px}
+      th{background:#1155CC;color:#fff}
+      b{font-size:13px;color:#333}
+    </style>
+    <h3>${title}</h3>
+    <table>
+      <tr><th>Code</th><th>Name / Description</th></tr>
+      ${rows || '<tr><td colspan="2" style="color:#999">No entries found.</td></tr>'}
+    </table>
+  `).setWidth(440).setHeight(Math.min(420, 80 + items.length * 30));
+  SpreadsheetApp.getUi().showModalDialog(html, title);
+}
+
+// ── 10. NOTIFICATIONS ─────────────────────────────────────────────────────────
 
 /**
  * Sends an email to the owner defined in column M of the selected row.
