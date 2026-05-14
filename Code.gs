@@ -263,14 +263,17 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   }
 
   // ── Col L: Abstract ───────────────────────────────────────────────────────
-  // Clear first so Sheets treats the re-written formula as new and fires =AI().
+  // Only write the formula when the cell is empty. =AI() evaluates client-side
+  // in the browser the first time it is seen, then caches its result.
+  // Clearing and re-writing the same formula does NOT re-trigger evaluation.
+  // To regenerate an abstract, the user should clear col L manually.
   const abstractCell = sheet.getRange(r, COL.ABSTRACT);
-  abstractCell.clearContent();
-  SpreadsheetApp.flush();
-  abstractCell.setNumberFormat('');
-  abstractCell.setFormula(
-    '=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'
-  );
+  if (!abstractCell.getFormula()) {
+    abstractCell.setNumberFormat('');
+    abstractCell.setFormula(
+      '=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'
+    );
+  }
 
   // ── Priority colour ───────────────────────────────────────────────────────
   let color;
@@ -1641,51 +1644,8 @@ function rebuildRegistryFromDrive() {
   // Auto-run full audit so KAL check, folder links and row colours are filled immediately
   updateAllInfo();
 
-  // Re-set all Abstract (col L) formulas after the audit so Google Sheets
-  // triggers a fresh evaluation of each =AI() call.
-  refreshAllAbstractFormulas_();
-}
-
-/**
- * Clears col L for every file row in the Registry then re-writes the =AI() formula,
- * forcing Google Sheets to evaluate each Abstract cell from scratch.
- * Called automatically at the end of rebuildRegistryFromDrive; can also be
- * run manually if abstracts are stale.
- */
-function refreshAllAbstractFormulas_() {
-  const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET.REGISTRY);
-  if (!sheet) return;
-
-  const lastRow = sheet.getLastRow();
-  if (lastRow < DATA_START) return;
-
-  const n       = lastRow - DATA_START + 1;
-  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
-
-  // Build formula array — blank for separator/empty rows, =AI() for file rows
-  const formulas = fileNames.map((row, i) => {
-    const r = DATA_START + i;
-    if (!row[0]) return [''];
-    return ['=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'];
-  });
-
-  const range = sheet.getRange(DATA_START, COL.ABSTRACT, n, 1);
-  // Reset cell format to Automatic (empty string '') so Sheets treats the
-  // content as a formula. 'General' is NOT the correct GAS format code —
-  // it can be interpreted as a custom literal-text format that blocks formulas.
-  range.clearContent();
-  SpreadsheetApp.flush();
-  range.setNumberFormat(''); // '' = Automatic/General in GAS
-  // Write each formula individually so Sheets processes them one at a time
-  // rather than as a bulk batch (batch setFormulas can silently fail for AI functions).
-  fileNames.forEach((row, i) => {
-    if (!row[0]) return; // skip blank/separator rows
-    const r   = DATA_START + i;
-    const f   = '=AI("Write a two-sentence abstract. Description: "&B' + r + '&". Filename: "&C' + r + ')';
-    sheet.getRange(r, COL.ABSTRACT).setFormula(f);
-  });
-  SpreadsheetApp.flush();
+  // =AI() formulas are written per-row by processAuditForRow (only on empty cells).
+  // No separate refresh pass needed after rebuild.
 }
 
 /** Searches Drive for all KAL-convention files; returns {PREFIX: [DriveFile]} map. */
