@@ -1556,12 +1556,7 @@ function rebuildRegistryFromDrive() {
   if (pinnedFile) {
     rebuildWriteFileRow_(sheet, r, pinnedFile);
     lastFileRow = r++;
-    // 3 blank rows + red border before the first regular group
-    for (let b = 0; b < 3; b++) blankRows.push(r + b);
-    r += 3;
-    sheet.getRange(r - 1, 1, 1, COL.OWNER)
-         .setBorder(null, null, true, null, null, null,
-                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    // No blank rows after pinned — master doc sits flush above the first group
   }
 
   // Rebuild renderOrder in case a group became empty after pinned extraction
