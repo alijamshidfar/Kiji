@@ -18,7 +18,7 @@
 
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
-  ui.createMenu('💠 KAL File System')
+  ui.createMenu('💠 KAL File Registry')
 
     // ── Top-level registry actions ──────────────────────────────────────────
     .addItem('🎯 Audit & Sync Selected File',  'updateSelectedInfo')
@@ -55,7 +55,7 @@ function onOpen() {
     .addSeparator()
 
     .addItem('🔔 Notify Owner',        'notifyOwner')
-    .addItem('📖 Show The User Guide', 'showUserGuide')
+    .addItem('📖 User Guide', 'showUserGuide')
     .addToUi();
 
   try { updateTemplateDropdown(); } catch (_) { /* non-fatal on open */ }
