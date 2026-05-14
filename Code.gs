@@ -3,7 +3,7 @@
  *
  * Column layout (Registry sheet):
  *  A(1)  Row number          B(2)  Human-Readable Description
- *  C(3)  File Name           D(4)  File Type
+ *  C(3)  Base File Name      D(4)  File Type
  *  E(5)  Current Version     F(6)  Current Folder
  *  G(7)  Link                H(8)  For Who
  *  I(9)  KAL Name Check      J(10) Destination Drive
@@ -1795,7 +1795,7 @@ function rebuildFormatHeader_(sheet) {
   const headers = [
     '',                                  // A: logo (floating image — value stays blank)
     'Human-Readable\nDescription',       // B
-    'File Name',                         // C
+    'Base File Name',                    // C
     'File Type',                         // D
     'Current\nVersion',                  // E
     'Current\nFolder',                   // F

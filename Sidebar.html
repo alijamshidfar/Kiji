@@ -529,8 +529,9 @@
         </li>
         <li>
           <span class="qs-num">3</span>
-          <span><strong>Format the Name</strong> — fill in <strong>Column C (File Name)</strong> using the pattern:<br>
-            <code style="display:inline-block;margin-top:4px;word-break:break-all;">[DRIVE CODE]-[ENTITY CODE]_[DOCTYPE CODE]_[Human-ReadableCamelCaseDescription]</code>
+          <span><strong>Format the Name</strong> — fill in <strong>Column C (Base File Name)</strong> using the pattern:<br>
+            <code style="display:inline-block;margin-top:4px;word-break:break-all;">[DRIVE CODE]-[ENTITY CODE]_[DOCTYPE CODE]_[Human-ReadableCamelCaseDescription]</code><br>
+            <span style="font-size:0.85em;color:var(--muted,#666);margin-top:3px;display:inline-block;">The real file name adds <code>_[YYYYMMDD]_v[N]</code> — the registry stores only the base.</span>
           </span>
         </li>
         <li>
@@ -689,7 +690,7 @@
       <span class="icon">▼</span>
     </div>
     <div class="section-body">
-      <p>The <strong>Registry</strong> sheet has 13 columns (A–M). All columns are script-managed <span class="badge badge-blue">AUTO</span> except <strong>col C</strong> (File Name) and <strong>col K</strong> (Preferred KAL Template) which require manual input.</p>
+      <p>The <strong>Registry</strong> sheet has 13 columns (A–M). All columns are script-managed <span class="badge badge-blue">AUTO</span> except <strong>col C</strong> (Base File Name) and <strong>col K</strong> (Preferred KAL Template) which require manual input.</p>
 
       <table class="col-table" style="margin-top:8px;">
         <tr><th>Col</th><th>Field</th><th>Notes</th></tr>
@@ -705,8 +706,8 @@
         </tr>
         <tr>
           <td class="col-letter">C</td>
-          <td><span class="badge badge-red">MANUAL</span><br>File Name</td>
-          <td>Full KAL-format name without extension. Validated on audit.</td>
+          <td><span class="badge badge-red">MANUAL</span><br>Base File Name</td>
+          <td>KAL base name without date, version, or extension: <code>[DRIVE]-[ENTITY]_[DOCTYPE]_[Description]</code>. The real file name appends <code>_[YYYYMMDD]_v[N]</code>. Validated on audit.</td>
         </tr>
         <tr>
           <td class="col-letter">D</td>
