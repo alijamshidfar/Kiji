@@ -438,13 +438,22 @@ function renumberAllRows_(sheet) {
   names.forEach((row, i) => {
     const hasFile    = !!row[0];
     const fileExists = hasFile && links[i][0] !== 'File not found';
-    values.push([fileExists ? ++seq : '']);
+    const isPinned   = hasFile && row[0].toString().startsWith(PINNED_FILE_BASE);
 
-    // All col A cells → navy; file rows get white bold number, others stay blank
-    bgs.push([HEADER_BLUE]);
-    fColors.push(['#ffffff']);
-    weights.push([fileExists ? 'bold' : 'normal']);
-    aligns.push(['center']);
+    if (isPinned) {
+      values.push(['★']);
+      bgs.push([PINNED_GOLD]);
+      fColors.push(['#ffffff']);
+      weights.push(['bold']);
+      aligns.push(['center']);
+    } else {
+      // All col A cells → navy; file rows get white bold number, others stay blank
+      values.push([fileExists ? ++seq : '']);
+      bgs.push([HEADER_BLUE]);
+      fColors.push(['#ffffff']);
+      weights.push([fileExists ? 'bold' : 'normal']);
+      aligns.push(['center']);
+    }
   });
 
   const colA = sheet.getRange(DATA_START, COL.ROW_NUM, n, 1);
@@ -1533,7 +1542,36 @@ function rebuildRegistryFromDrive() {
   let r = DATA_START;
   let lastFileRow = -1;
   const blankRows = []; // track blank separator rows to give them a thin height
-  renderOrder.forEach((prefix, idx) => {
+
+  // Pin the master document to the very top before all groups.
+  let pinnedFile = null;
+  for (const prefix of Object.keys(groups)) {
+    const idx = groups[prefix].findIndex(f => f.getName().startsWith(PINNED_FILE_BASE));
+    if (idx !== -1) {
+      pinnedFile = groups[prefix].splice(idx, 1)[0];
+      if (!groups[prefix].length) delete groups[prefix];
+      break;
+    }
+  }
+  if (pinnedFile) {
+    rebuildWriteFileRow_(sheet, r, pinnedFile);
+    lastFileRow = r++;
+    // 3 blank rows + red border before the first regular group
+    for (let b = 0; b < 3; b++) blankRows.push(r + b);
+    r += 3;
+    sheet.getRange(r - 1, 1, 1, COL.OWNER)
+         .setBorder(null, null, true, null, null, null,
+                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+  }
+
+  // Rebuild renderOrder in case a group became empty after pinned extraction
+  const definedUp  = REBUILD_PREFIX_ORDER.filter(p => groups[p] && groups[p].length);
+  const othersUp   = Object.keys(groups)
+                           .filter(p => !REBUILD_PREFIX_ORDER.includes(p))
+                           .sort();
+  const finalOrder = [...definedUp, ...othersUp];
+
+  finalOrder.forEach((prefix, idx) => {
     if (idx > 0) {
       for (let b = 0; b < 3; b++) blankRows.push(r + b);
       r += 3; // 3 blank rows between groups
