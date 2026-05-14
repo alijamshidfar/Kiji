@@ -44,7 +44,7 @@ const COLOR = Object.freeze({
 // ── Header / separator colours ───────────────────────────────────────────────
 const HEADER_BLUE   = '#111184';  // deep navy — matches sidebar --blue
 const SEPARATOR_RED = '#cc0000'; // red separator rows between drive-code groups
-const PINNED_GOLD   = '#B8860B'; // dark gold — col A marker for the pinned master doc
+const PINNED_GOLD   = '#cc0000'; // red — col A marker for the pinned master doc
 
 // Drive-code prefix order for rebuildRegistryFromDrive()
 // Edit this array to change the grouping order. Unknown codes follow, sorted.
