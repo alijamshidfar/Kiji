@@ -67,7 +67,8 @@ function onOpen() {
 function applySheetFont_(sheet) {
   const maxRows = sheet.getMaxRows();
   if (maxRows < DATA_START) return;
-  sheet.getRange(DATA_START, 1, maxRows - DATA_START + 1, COL.OWNER)
+  // Start from COL.DESC (col B) — col A formatting is managed by renumberAllRows_
+  sheet.getRange(DATA_START, COL.DESC, maxRows - DATA_START + 1, COL.OWNER - COL.DESC + 1)
        .setFontFamily('Georgia')
        .setFontSize(10);
 }
@@ -94,7 +95,8 @@ function onEdit(e) {
     }
   }
 
-  sheet.getRange(r, 1, 1, COL.OWNER)
+  // Start from COL.DESC (col B) — col A is managed by renumberAllRows_
+  sheet.getRange(r, COL.DESC, 1, COL.OWNER - COL.DESC + 1)
        .setFontFamily('Georgia')
        .setFontSize(10);
 }
@@ -1886,9 +1888,10 @@ function rebuildFormatHeader_(sheet) {
       try {
         // Insert at 50×50 display size, centred in the 70×60 header cell.
         // High-res source (800×800) downsampled to 50×50 renders crisply.
-        // Do NOT call flush() before setWidth/setHeight — that would flash the native size.
+        // flush() AFTER resize pushes the final size to the browser immediately.
         const img = sheet.insertImage(blob, 1, 1, 10, 5);
         if (img) { img.setWidth(50).setHeight(50); }
+        SpreadsheetApp.flush();
         console.log('Logo inserted successfully (contentType=' + ct + ')');
       } catch (e) {
         SpreadsheetApp.getActiveSpreadsheet().toast(
