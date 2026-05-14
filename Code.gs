@@ -592,7 +592,6 @@ function updateAllInfo() {
   }
 
   sheet.getRange(DATA_START, COL.DESC, numRows, LAST_COL - COL.DESC + 1).setBackgrounds(bgColors);
-  renumberAllRows_(sheet);
 
   // Ensure 3 blank rows between groups and after the last group FIRST,
   // so that row-height pass below also covers any newly inserted blank rows.
@@ -606,6 +605,10 @@ function updateAllInfo() {
     const colC = sheet.getRange(DATA_START, COL.FILENAME, N, 1).getValues();
     colC.forEach((r, i) => { if (!r[0]) sheet.setRowHeight(DATA_START + i, 20); });
   }
+
+  // Renumber AFTER all row insertions/deletions so col A always reflects the final layout.
+  renumberAllRows_(sheet);
+  SpreadsheetApp.flush();
 
   let msg = errors > 0
     ? 'Done — ' + errors + ' row(s) had errors (View → Logs).'
@@ -1673,8 +1676,15 @@ function rebuildRegistryFromDrive() {
   // Apply Georgia/10 to all data rows so newly added rows inherit the same default.
   applySheetFont_(sheet);
 
-  // Auto-run full audit so KAL check, folder links and row colours are filled immediately
+  // Auto-run full audit so KAL check, folder links and row colours are filled immediately.
+  // updateAllInfo calls maintainGroupSpacing_ which may call insertRowsAfter — inserting
+  // rows causes Google Sheets to reset floating images, so the logo must be (re)inserted
+  // AFTER updateAllInfo finishes.
   updateAllInfo();
+
+  // Insert logo last — after all row operations — so it appears immediately without a
+  // page refresh.  rebuildInsertLogo_ removes any stale image before inserting a fresh one.
+  rebuildInsertLogo_(sheet);
 
   // =AI() formulas are written per-row by processAuditForRow (only on empty cells).
   // No separate refresh pass needed after rebuild.
@@ -1862,45 +1872,49 @@ function rebuildFormatHeader_(sheet) {
        .setWrap(true);
 
   sheet.setRowHeight(1, 60);
+}
 
-  // Remove any existing logo images in row 1 — each rebuild would otherwise
-  // stack a new image on top because the header row is outside the clear range.
+/**
+ * Inserts the Kiji logo into A1.  Called AFTER all row operations so that
+ * insertRowsAfter calls in maintainGroupSpacing_ do not cause the floating
+ * image to vanish until the next page refresh (a known Google Sheets quirk).
+ */
+function rebuildInsertLogo_(sheet) {
+  // Remove any existing logo images in row 1 so we never stack duplicates.
   try {
     sheet.getImages().forEach(img => {
       if (img.getAnchorCell().getRow() === 1) img.remove();
     });
   } catch (_) {}
 
-  // Insert Kiji logo into A1.
   // Priority: KAL_LOGO_PNG_BASE64 constant → Settings tab D2 (Drive link or direct URL)
   const blob = (KAL_LOGO_PNG_BASE64
       ? Utilities.newBlob(Utilities.base64Decode(KAL_LOGO_PNG_BASE64), 'image/png', 'kiji-logo.png')
       : null) || rebuildGetLogoBlobFromSettings_();
-  if (blob) {
-    const ct = blob.getContentType() || '';
-    if (ct.indexOf('svg') !== -1) {
-      SpreadsheetApp.getActiveSpreadsheet().toast(
-        'Logo file is SVG — Google Sheets only supports PNG/JPG.\n' +
-        'Upload a PNG version to Drive and update Settings!D2.',
-        '⚠️ Logo', 10);
-      console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
-    } else {
-      try {
-        // Insert at 50×50 display size, centred in the 70×60 header cell.
-        // High-res source (800×800) downsampled to 50×50 renders crisply.
-        // flush() AFTER resize pushes the final size to the browser immediately.
-        const img = sheet.insertImage(blob, 1, 1, 10, 5);
-        if (img) { img.setWidth(50).setHeight(50); }
-        SpreadsheetApp.flush();
-        console.log('Logo inserted successfully (contentType=' + ct + ')');
-      } catch (e) {
-        SpreadsheetApp.getActiveSpreadsheet().toast(
-          'Logo insert failed: ' + e.message, '⚠️ Logo', 8);
-        console.warn('Logo insertImage failed: ' + e.message);
-      }
-    }
-  } else {
+  if (!blob) {
     console.warn('Logo: no blob — set KAL_LOGO_PNG_BASE64 or add a PNG Drive link in Settings!D2');
+    return;
+  }
+  const ct = blob.getContentType() || '';
+  if (ct.indexOf('svg') !== -1) {
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      'Logo file is SVG — Google Sheets only supports PNG/JPG.\n' +
+      'Upload a PNG version to Drive and update Settings!D2.',
+      '⚠️ Logo', 10);
+    console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
+    return;
+  }
+  try {
+    // Insert at 50×50 display size, centred in the 70×60 header cell.
+    // High-res source (800×800) downsampled to 50×50 renders crisply.
+    const img = sheet.insertImage(blob, 1, 1, 10, 5);
+    if (img) { img.setWidth(50).setHeight(50); }
+    SpreadsheetApp.flush();
+    console.log('Logo inserted successfully (contentType=' + ct + ')');
+  } catch (e) {
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      'Logo insert failed: ' + e.message, '⚠️ Logo', 8);
+    console.warn('Logo insertImage failed: ' + e.message);
   }
 }
 
