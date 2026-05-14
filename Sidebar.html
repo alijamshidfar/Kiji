@@ -794,19 +794,19 @@
     </div>
     <div class="section-body">
       <div class="menu-item blue">
-        <span class="fn-name">Audit All Rows</span>
+        <span class="fn-name">🔄 Audit All Rows</span>
         <span class="fn-desc">Validates every row: checks naming convention, Drive/entity/doc-type codes, searches Drive, updates cols E/F/G/I, and applies status colors. Runs as a single batch for performance.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Audit Selected Row</span>
+        <span class="fn-name">🎯 Audit Selected Row</span>
         <span class="fn-desc">Same as above but only for the cursor row — much faster for a quick single-row check.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Search Missing KAL Files</span>
+        <span class="fn-name">🔍 Search Missing KAL Files</span>
         <span class="fn-desc">Scans Drive for files starting with a registered Drive prefix (OP-, LP-, PC-, etc.) that are not yet in the Registry. Found files are inserted below their section in sorted order.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Notify Owner</span>
+        <span class="fn-name">🔔 Notify Owner</span>
         <span class="fn-desc">Sends an email to the address in col M for the selected row, with the row's current audit status and a link to the file. Requires Gmail send permission.</span>
       </div>
     </div>
@@ -819,27 +819,27 @@
     </div>
     <div class="section-body">
       <div class="menu-item blue">
-        <span class="fn-name">Create Selected File</span>
+        <span class="fn-name">🏗️ Create Selected File</span>
         <span class="fn-desc">Creates a new Google file in Drive for the selected row using the name in col C. Optionally copies from the template in col K or Settings!B2. Inserts the Drive link into col G.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Open Current Folder</span>
+        <span class="fn-name">📂 Open Current Folder</span>
         <span class="fn-desc">Opens the Drive folder listed in col F for the selected row in a new browser tab.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Move to Destination Drive</span>
+        <span class="fn-name">🚚 Move to Destination Drive</span>
         <span class="fn-desc">Moves the selected file to the URL in col J (or Settings!A2 if col J is empty). Updates col F and col G automatically.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Promote to Final &amp; Move</span>
+        <span class="fn-name">🏁 Promote to vFINAL &amp; Move</span>
         <span class="fn-desc">Renames the file to <code>vFINAL</code>, moves it to Destination Drive, and archives the previous versioned copy to Settings!C2. Triggers a full row re-audit.</span>
       </div>
       <div class="menu-item red">
-        <span class="fn-name">Remove Selected File</span>
+        <span class="fn-name">🗑️ Remove Selected Version</span>
         <span class="fn-desc">Permanently deletes the Drive file linked in col G. Prompts for confirmation before deletion.</span>
       </div>
       <div class="menu-item red">
-        <span class="fn-name">Remove All Versions</span>
+        <span class="fn-name">☢️ Remove All Versions</span>
         <span class="fn-desc">Deletes all Drive files whose name matches the base name in col C (all version suffixes). Use with caution.</span>
       </div>
     </div>
@@ -852,23 +852,23 @@
     </div>
     <div class="section-body">
       <div class="menu-item blue">
-        <span class="fn-name">Rebuild Registry from Drive</span>
+        <span class="fn-name">🔁 Rebuild Registry from Drive</span>
         <span class="fn-desc">Clears all existing rows and repopulates the registry by scanning Google Drive for every KAL-convention file. Groups files by drive-code prefix (OP, LP, PC, then others). Runs a full audit automatically after rebuilding.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Keep Only Latest Version</span>
+        <span class="fn-name">🧹 Keep Only Latest Version</span>
         <span class="fn-desc">Scans Drive for all versions of each registered file. Keeps only the highest version; trashes older copies and updates links.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Archive Older Versions</span>
+        <span class="fn-name">📦 Archive Older Versions</span>
         <span class="fn-desc">Moves all non-latest versions to the archive folder (Settings!C2) instead of deleting them. Useful for audit trails.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Repair Broken Links</span>
+        <span class="fn-name">🛠️ Repair Broken Links</span>
         <span class="fn-desc">Re-searches Drive for every row where col G shows <code>Not Found</code> or a stale URL, and repairs any that can be matched by exact file name.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Clear All Diagnostics</span>
+        <span class="fn-name">🧼 Clear All Diagnostics</span>
         <span class="fn-desc">Wipes col I (KAL Name Check) and removes all row background colors, resetting the sheet to an unaudited state.</span>
       </div>
     </div>
@@ -881,19 +881,19 @@
     </div>
     <div class="section-body">
       <div class="menu-item green">
-        <span class="fn-name">Generate Health Report</span>
+        <span class="fn-name">📊 Generate Health Report</span>
         <span class="fn-desc">Opens a modal summarizing the registry: total rows, red/yellow/green counts, missing files, finalized %, and a list of all error rows.</span>
       </div>
       <div class="menu-item green">
-        <span class="fn-name">Export Registry to PDF</span>
+        <span class="fn-name">📤 Export Registry to PDF</span>
         <span class="fn-desc">Downloads the Registry sheet as a formatted PDF, saved to your Drive root with the current date in the file name.</span>
       </div>
       <div class="menu-item green">
-        <span class="fn-name">Toggle Compact View</span>
+        <span class="fn-name">🌓 Toggle Compact View</span>
         <span class="fn-desc">Shows/hides columns D, H, J, and L to reduce horizontal scrolling during data entry.</span>
       </div>
       <div class="menu-item green">
-        <span class="fn-name">Toggle Done Rows</span>
+        <span class="fn-name">👁️ Toggle Done Rows</span>
         <span class="fn-desc">Shows/hides all green (vFINAL) rows so you can focus on files still in progress.</span>
       </div>
     </div>
