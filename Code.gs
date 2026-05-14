@@ -61,6 +61,32 @@ function onOpen() {
   try { updateTemplateDropdown(); } catch (_) { /* non-fatal on open */ }
 }
 
+// ── Sheet font default ────────────────────────────────────────────────────────
+
+/** Applies Georgia/10 to every non-header row so newly added rows inherit it. */
+function applySheetFont_(sheet) {
+  const maxRows = sheet.getMaxRows();
+  if (maxRows < DATA_START) return;
+  sheet.getRange(DATA_START, 1, maxRows - DATA_START + 1, COL.OWNER)
+       .setFontFamily('Georgia')
+       .setFontSize(10);
+}
+
+/**
+ * Simple onEdit trigger — re-applies Georgia/10 to any row the user edits in
+ * the Registry sheet, so manually added rows get the correct default instantly.
+ */
+function onEdit(e) {
+  if (!e) return;
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== SHEET.REGISTRY) return;
+  const r = e.range.getRow();
+  if (r < DATA_START) return;
+  sheet.getRange(r, 1, 1, COL.OWNER)
+       .setFontFamily('Georgia')
+       .setFontSize(10);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Returns the URL from a cell: rich-text link first, then plain value. */
@@ -730,7 +756,7 @@ function maintainGroupSpacing_(sheet) {
           // (background, font size, font colour, data validations, etc.).
           const blankRange = sheet.getRange(endRow + b, 2, 1, COL.OWNER - 1);
           blankRange.setBackground(null)
-                    .setFontSize(10).setFontWeight('normal').setFontColor(null)
+                    .setFontFamily('Georgia').setFontSize(10).setFontWeight('normal').setFontColor(null)
                     .setHorizontalAlignment('left')
                     .clearContent().clearDataValidations();
           sheet.getRange(endRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
@@ -1547,6 +1573,9 @@ function rebuildRegistryFromDrive() {
   const total = renderOrder.reduce((n, p) => n + (groups[p] || []).length, 0);
   toast('Rebuild complete — ' + total + ' files. Running full audit…', '✅ Rebuilt', 4);
 
+  // Apply Georgia/10 to all data rows so newly added rows inherit the same default.
+  applySheetFont_(sheet);
+
   // Auto-run full audit so KAL check, folder links and row colours are filled immediately
   updateAllInfo();
 
@@ -1770,6 +1799,7 @@ function rebuildFormatHeader_(sheet) {
   sheet.getRange(1, 1, 1, headers.length)
        .setValues([headers])
        .setBackground(HEADER_BLUE)
+       .setFontFamily('Georgia')
        .setFontColor('#ffffff')
        .setFontWeight('bold')
        .setFontSize(10)
