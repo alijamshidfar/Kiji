@@ -1096,6 +1096,7 @@ function removeAllVersions() {
   const ui       = SpreadsheetApp.getUi();
   const sheet    = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const r        = sheet.getActiveRange().getRow();
+  if (r < DATA_START) return;
   const baseName = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
   if (!baseName) return;
 
@@ -1111,8 +1112,9 @@ function removeAllVersions() {
     }
   } catch (e) { toast('Drive search failed: ' + e.message, '❌ Error', 5); return; }
 
-  updateSelectedInfo();
-  toast('Trashed ' + trashed + ' file(s).' + (failed ? ' (' + failed + ' failed)' : ''), '☢️ Done', 5);
+  sheet.deleteRow(r);
+  maintainGroupSpacing_(sheet);
+  toast('Trashed ' + trashed + ' file(s) and removed from registry.' + (failed ? ' (' + failed + ' failed)' : ''), '☢️ Done', 5);
 }
 
 // ── 7. MAINTENANCE ────────────────────────────────────────────────────────────
