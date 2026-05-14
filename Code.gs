@@ -99,41 +99,37 @@ function onEdit(e) {
        .setFontSize(10);
 }
 
-// ── AI abstract generation ────────────────────────────────────────────────────
+// ── Abstract generation (rule-based, no API key required) ────────────────────
 
 /**
- * Calls the Gemini REST API and returns a two-sentence abstract, or null on
- * any error (missing key, network failure, rate limit, etc.).
- *
- * Setup: Apps Script editor → Project Settings → Script Properties →
- *   add property  GEMINI_API_KEY  with your key from https://aistudio.google.com
+ * Builds a two-sentence abstract from row metadata already available in the
+ * registry. No external API, no cost, no setup.
  */
-function generateAbstract_(description, baseName) {
-  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
-  if (!key) return null;
-  try {
-    const prompt = 'Write a two-sentence abstract for a KAL Academy document. ' +
-                   'Description: "' + description + '". ' +
-                   'Base filename: "' + baseName + '". ' +
-                   'Be concise and factual.';
-    const resp = UrlFetchApp.fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key,
-      {
-        method: 'post',
-        contentType: 'application/json',
-        muteHttpExceptions: true,
-        payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      }
-    );
-    if (resp.getResponseCode() !== 200) {
-      console.warn('generateAbstract_: HTTP ' + resp.getResponseCode());
-      return null;
-    }
-    return JSON.parse(resp.getContentText()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
-  } catch (e) {
-    console.warn('generateAbstract_: ' + e.message);
-    return null;
-  }
+function generateAbstract_(description, docType, entity, drive, version, folder) {
+  const typeVerb = {
+    POLICY: 'establishes the policy for', PROCEDURE: 'defines the procedure for',
+    TEMPLATE: 'provides a standard template for', REPORT: 'presents a report on',
+    GUIDE: 'provides guidance on', FORM: 'is the official form for',
+    CONTRACT: 'contains the contract terms for', PLAN: 'outlines the plan for',
+    TRAINING: 'covers training material on', MANUAL: 'is the manual for',
+    CHECKLIST: 'provides a checklist for', AGREEMENT: 'documents the agreement for',
+    SOP: 'describes the standard operating procedure for'
+  };
+
+  const verb   = typeVerb[(docType || '').toUpperCase()] || 'documents';
+  const desc   = (description || '').trim().replace(/\.+$/, '');
+  const line1  = desc
+    ? 'This document ' + verb + ': ' + desc + '.'
+    : 'This KAL ' + (docType || 'document').toLowerCase() + ' ' + verb + ' the topic.';
+
+  const parts = [];
+  if (entity && entity !== 'ALL') parts.push('Owned by ' + entity);
+  if (drive)                       parts.push(drive + ' drive');
+  if (version)                     parts.push('v' + version);
+  if (folder)                      parts.push('stored in ' + folder);
+  const line2 = parts.length ? parts.join(' · ') + '.' : '';
+
+  return (line1 + (line2 ? '  ' + line2 : '')).trim() || null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -300,15 +296,13 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   }
 
   // ── Col L: Abstract ───────────────────────────────────────────────────────
-  // Only generate on single-row audits (applyBg=true) and only if the cell is
-  // empty — bulk updateAllInfo() skips this to avoid Gemini API rate limits.
-  if (applyBg) {
-    const abstractCell = sheet.getRange(r, COL.ABSTRACT);
-    if (!abstractCell.getValue() && !abstractCell.getFormula()) {
-      const desc     = (sheet.getRange(r, COL.DESC).getValue() || '').toString().trim();
-      const abstract = generateAbstract_(desc, baseName);
-      if (abstract) abstractCell.setValue(abstract);
-    }
+  // Rule-based: instant, no API. Only writes when the cell is empty so
+  // existing user-written abstracts are never overwritten.
+  const abstractCell = sheet.getRange(r, COL.ABSTRACT);
+  if (!abstractCell.getValue() && !abstractCell.getFormula()) {
+    const desc     = (sheet.getRange(r, COL.DESC).getValue() || '').toString().trim();
+    const abstract = generateAbstract_(desc, docTypeCode, entityCode, driveCode, info.version, info.folderName);
+    if (abstract) abstractCell.setValue(abstract);
   }
 
   // ── Priority colour ───────────────────────────────────────────────────────
