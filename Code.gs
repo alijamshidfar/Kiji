@@ -1046,6 +1046,7 @@ function removeSelectedFile() {
   const ui    = SpreadsheetApp.getUi();
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const r     = sheet.getActiveRange().getRow();
+  if (r < DATA_START) { toast('Select a data row first.', '⚠️ Warning', 4); return; }
 
   let fileUrl = null;
   try { fileUrl = sheet.getRange(r, COL.LINK).getRichTextValue().getLinkUrl(); } catch (_) {}
@@ -1059,8 +1060,9 @@ function removeSelectedFile() {
 
   try {
     DriveApp.getFileById(fileId).setTrashed(true);
-    updateSelectedInfo();
-    toast('Version moved to Trash.', '🗑️ Removed', 4);
+    sheet.deleteRow(r);
+    maintainGroupSpacing_(sheet);
+    toast('Version moved to Trash and removed from registry.', '🗑️ Removed', 4);
   } catch (e) { toast('Could not trash the file: ' + e.message, '❌ Error', 5); }
 }
 
