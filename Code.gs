@@ -82,6 +82,18 @@ function onEdit(e) {
   if (sheet.getName() !== SHEET.REGISTRY) return;
   const r = e.range.getRow();
   if (r < DATA_START) return;
+
+  // Protect the pinned master document: revert any rename attempt on col C.
+  if (e.range.getColumn() === COL.FILENAME) {
+    const current = e.range.getValue().toString().trim();
+    const old     = (e.oldValue || '').toString().trim();
+    if (old.startsWith(PINNED_FILE_BASE) && !current.startsWith(PINNED_FILE_BASE)) {
+      e.range.setValue(old);
+      toast('The master registry document name is protected and cannot be changed.', '🔒 Protected', 5);
+      return;
+    }
+  }
+
   sheet.getRange(r, 1, 1, COL.OWNER)
        .setFontFamily('Georgia')
        .setFontSize(10);
@@ -1088,6 +1100,12 @@ function removeSelectedFile() {
   const r     = sheet.getActiveRange().getRow();
   if (r < DATA_START) { toast('Select a data row first.', '⚠️ Warning', 4); return; }
 
+  const selectedName = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
+  if (selectedName.startsWith(PINNED_FILE_BASE)) {
+    toast('The master registry document is protected and cannot be removed.', '🔒 Protected', 5);
+    return;
+  }
+
   let fileUrl = null;
   try { fileUrl = sheet.getRange(r, COL.LINK).getRichTextValue().getLinkUrl(); } catch (_) {}
   if (!fileUrl) { toast('No file link found in this row.', '⚠️ Warning', 4); return; }
@@ -1113,6 +1131,10 @@ function removeAllVersions() {
   if (r < DATA_START) return;
   const baseName = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
   if (!baseName) return;
+  if (baseName.startsWith(PINNED_FILE_BASE)) {
+    toast('The master registry document is protected and cannot be removed.', '🔒 Protected', 5);
+    return;
+  }
 
   const response = ui.alert('☢️ NUCLEAR WARNING', 'Trash EVERY version of: ' + baseName, ui.ButtonSet.YES_NO);
   if (response !== ui.Button.YES) return;
