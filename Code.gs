@@ -99,6 +99,43 @@ function onEdit(e) {
        .setFontSize(10);
 }
 
+// ── AI abstract generation ────────────────────────────────────────────────────
+
+/**
+ * Calls the Gemini REST API and returns a two-sentence abstract, or null on
+ * any error (missing key, network failure, rate limit, etc.).
+ *
+ * Setup: Apps Script editor → Project Settings → Script Properties →
+ *   add property  GEMINI_API_KEY  with your key from https://aistudio.google.com
+ */
+function generateAbstract_(description, baseName) {
+  const key = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
+  if (!key) return null;
+  try {
+    const prompt = 'Write a two-sentence abstract for a KAL Academy document. ' +
+                   'Description: "' + description + '". ' +
+                   'Base filename: "' + baseName + '". ' +
+                   'Be concise and factual.';
+    const resp = UrlFetchApp.fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key,
+      {
+        method: 'post',
+        contentType: 'application/json',
+        muteHttpExceptions: true,
+        payload: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      }
+    );
+    if (resp.getResponseCode() !== 200) {
+      console.warn('generateAbstract_: HTTP ' + resp.getResponseCode());
+      return null;
+    }
+    return JSON.parse(resp.getContentText()).candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+  } catch (e) {
+    console.warn('generateAbstract_: ' + e.message);
+    return null;
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Returns the URL from a cell: rich-text link first, then plain value. */
@@ -263,16 +300,15 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
   }
 
   // ── Col L: Abstract ───────────────────────────────────────────────────────
-  // Only write the formula when the cell is empty. =AI() evaluates client-side
-  // in the browser the first time it is seen, then caches its result.
-  // Clearing and re-writing the same formula does NOT re-trigger evaluation.
-  // To regenerate an abstract, the user should clear col L manually.
-  const abstractCell = sheet.getRange(r, COL.ABSTRACT);
-  if (!abstractCell.getFormula()) {
-    abstractCell.setNumberFormat('');
-    abstractCell.setFormula(
-      '=AI("Based ONLY on description \'"&B' + r + '&"\' and filename \'"&C' + r + '&"\', write a two-sentence summary.")'
-    );
+  // Only generate on single-row audits (applyBg=true) and only if the cell is
+  // empty — bulk updateAllInfo() skips this to avoid Gemini API rate limits.
+  if (applyBg) {
+    const abstractCell = sheet.getRange(r, COL.ABSTRACT);
+    if (!abstractCell.getValue() && !abstractCell.getFormula()) {
+      const desc     = (sheet.getRange(r, COL.DESC).getValue() || '').toString().trim();
+      const abstract = generateAbstract_(desc, baseName);
+      if (abstract) abstractCell.setValue(abstract);
+    }
   }
 
   // ── Priority colour ───────────────────────────────────────────────────────
