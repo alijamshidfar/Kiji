@@ -614,6 +614,10 @@
           <span class="setting-cell">C2</span>
           <span>Archive folder URL (used by <em>Archive Older Versions</em> and <em>Promote to Final</em>)</span>
         </div>
+        <div class="setting-row">
+          <span class="setting-cell">E2</span>
+          <span>Root Folder URL — scanned by <em>Rebuild Registry from Drive</em> and <em>Refresh Non-KAL Section</em> to find files that do not follow the KAL naming convention</span>
+        </div>
       </div>
       <div class="warn-box" style="margin-top:8px;">
         <strong>Required:</strong> Paste the full Google Drive folder URL into each cell. Functions will error if the cell is empty.
@@ -819,6 +823,10 @@
       <span class="icon">▼</span>
     </div>
     <div class="section-body">
+      <div class="menu-item green">
+        <span class="fn-name">📋 Show All Versions</span>
+        <span class="fn-desc">Opens a modal listing every Drive version of the selected file. Columns: <strong>File Name</strong> (clickable link) · <strong>Date</strong> (YYYYMMDD) · <strong>Version</strong> (v1 / vFINAL) · <strong>Drive Location</strong> (clickable folder link). Sorted newest date first.</span>
+      </div>
       <div class="menu-item blue">
         <span class="fn-name">🏗️ Create Selected File</span>
         <span class="fn-desc">Creates a new Google file in Drive for the selected row using the name in col C. Optionally copies from the template in col K or Settings!B2. Inserts the Drive link into col G.</span>
@@ -854,7 +862,11 @@
     <div class="section-body">
       <div class="menu-item blue">
         <span class="fn-name">🔁 Rebuild Registry from Drive</span>
-        <span class="fn-desc">Clears all existing rows and repopulates the registry by scanning Google Drive for every KAL-convention file. Groups files by drive-code prefix (OP, LP, PC, then others). Runs a full audit automatically after rebuilding.</span>
+        <span class="fn-desc">Clears all existing rows and repopulates the registry by scanning Google Drive for every KAL-convention file. Groups files by drive-code prefix (OP, LP, PC, then others). Also appends non-KAL files found in the Root Folder (Settings!E2) at the bottom. Runs a full audit automatically after rebuilding.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">🗂️ Refresh Non-KAL Section</span>
+        <span class="fn-desc">Updates <em>only</em> the non-KAL file block at the bottom of the registry — without clearing or touching any KAL rows. Re-scans the Root Folder (Settings!E2), replaces the old non-KAL rows with fresh results, and renumbers col A. Use this instead of a full rebuild when only non-KAL files have changed.</span>
       </div>
       <div class="menu-item blue">
         <span class="fn-name">🧹 Keep Only Latest Version</span>
