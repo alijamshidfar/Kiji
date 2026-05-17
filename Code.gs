@@ -2752,153 +2752,122 @@ function flagStaleFiles() {
 // ── Feature 4: Summary Dashboard ─────────────────────────────────────────────
 
 /**
- * Creates or replaces a "Dashboard" sheet with counts by drive code,
- * entity code, doc type, KAL status, and version state.
+ * Shows a modal dialog with a summary dashboard: totals by drive code,
+ * entity, doc type, and KAL status.
  */
 function generateSummaryDashboard() {
-  const ss      = SpreadsheetApp.getActiveSpreadsheet();
+  const ss       = SpreadsheetApp.getActiveSpreadsheet();
   const regSheet = ss.getSheetByName(SHEET.REGISTRY);
   if (!regSheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
 
   const lastRow = regSheet.getLastRow();
   if (lastRow < DATA_START) { toast('No data rows found.', '⚠️ Warning', 4); return; }
 
-  const n        = lastRow - DATA_START + 1;
-  const fileNames = regSheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
-  const versions  = regSheet.getRange(DATA_START, COL.VERSION,  n, 1).getValues();
+  const n         = lastRow - DATA_START + 1;
+  const fileNames = regSheet.getRange(DATA_START, COL.FILENAME,  n, 1).getValues();
+  const versions  = regSheet.getRange(DATA_START, COL.VERSION,   n, 1).getValues();
   const kalChecks = regSheet.getRange(DATA_START, COL.KAL_CHECK, n, 1).getValues();
-  const linkVals  = regSheet.getRange(DATA_START, COL.LINK, n, 1).getValues();
+  const linkVals  = regSheet.getRange(DATA_START, COL.LINK,      n, 1).getValues();
 
   const driveCounts  = {};
   const entityCounts = {};
   const docCounts    = {};
   const statusCounts = { ok: 0, error: 0, nonKal: 0, notFound: 0 };
-  let   vFinalCount  = 0;
-  let   inProgress   = 0;
-  let   totalFiles   = 0;
+  let vFinalCount = 0, inProgress = 0, totalFiles = 0;
 
   for (let i = 0; i < n; i++) {
     const fn = (fileNames[i][0] || '').toString().trim();
     if (!fn) continue;
     totalFiles++;
 
-    const parts    = fn.split(/[-_]/);
     const driveCode  = (fn.match(/^([A-Za-z]{2,4})-/) || [])[1] || '?';
+    const parts      = fn.split(/[-_]/);
     const entityCode = parts.length >= 2 ? parts[1].toUpperCase() : '?';
     const docCode    = parts.length >= 3 ? parts[2].toUpperCase() : '?';
 
-    driveCounts[driveCode]  = (driveCounts[driveCode]  || 0) + 1;
+    driveCounts[driveCode]   = (driveCounts[driveCode]   || 0) + 1;
     entityCounts[entityCode] = (entityCounts[entityCode] || 0) + 1;
     docCounts[docCode]       = (docCounts[docCode]       || 0) + 1;
 
     const kalStatus = (kalChecks[i][0] || '').toString().trim();
     const linkVal   = (linkVals[i][0]  || '').toString().trim();
-    if      (kalStatus === 'Non-KAL')   statusCounts.nonKal++;
+    if      (kalStatus === 'Non-KAL') statusCounts.nonKal++;
     else if (kalStatus === 'File not found' || linkVal === 'File not found') statusCounts.notFound++;
     else if (kalStatus && kalStatus !== 'OK') statusCounts.error++;
-    else    statusCounts.ok++;
+    else statusCounts.ok++;
 
     const ver = (versions[i][0] || '').toString().trim().toUpperCase();
     if (ver === 'FINAL') vFinalCount++;
-    else if (fn) inProgress++;
+    else inProgress++;
   }
 
-  // Create or replace Dashboard sheet
-  let dash = ss.getSheetByName('Dashboard');
-  if (dash) {
-    dash.clear();
-  } else {
-    dash = ss.insertSheet('Dashboard');
+  function tableRows_(obj) {
+    return Object.entries(obj).sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `<tr><td>${k}</td><td class="num">${v}</td></tr>`).join('');
   }
 
-  const headerStyle = (range) => {
-    range.setBackground(HEADER_BLUE)
-         .setFontColor('#ffffff')
-         .setFontWeight('bold')
-         .setFontSize(11)
-         .setHorizontalAlignment('center');
-  };
+  const overviewRows = [
+    ['Total Files',            totalFiles,              ''],
+    ['✅ vFINAL',              vFinalCount,             'color:#1a7f37;font-weight:600'],
+    ['🔄 In Progress',         inProgress,              ''],
+    ['✔️ KAL Check OK',        statusCounts.ok,         'color:#1a7f37'],
+    ['⚠️ Errors',             statusCounts.error,      'color:#c0392b'],
+    ['📭 Missing from Drive',  statusCounts.notFound,   'color:#b45309'],
+    ['📁 Non-KAL',             statusCounts.nonKal,     'color:#555'],
+  ].map(([label, val, style]) =>
+    `<tr><td style="${style}">${label}</td><td class="num" style="${style}">${val}</td></tr>`
+  ).join('');
 
-  let r = 1;
+  const html = `
+    <style>
+      *{box-sizing:border-box}
+      body{font-family:Arial,sans-serif;font-size:13px;padding:14px 16px;margin:0;color:#202124}
+      h3{margin:0 0 2px;font-size:15px;color:#111184}
+      .sub{margin:0 0 14px;font-size:11px;color:#888}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+      .card{border:1px solid #e0e0e0;border-radius:6px;overflow:hidden}
+      .card-title{background:#111184;color:#fff;font-size:11px;font-weight:700;
+                  letter-spacing:.5px;text-transform:uppercase;padding:6px 10px}
+      table{width:100%;border-collapse:collapse}
+      td{padding:5px 10px;border-bottom:1px solid #f0f0f0;font-size:12px}
+      tr:last-child td{border-bottom:none}
+      tr:hover td{background:#f4f6ff}
+      .num{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;width:50px}
+    </style>
+    <h3>📊 Registry Summary</h3>
+    <p class="sub">Generated ${new Date().toLocaleString()} &nbsp;·&nbsp; ${totalFiles} total file(s)</p>
+    <div class="grid">
+      <div class="card">
+        <div class="card-title">Overview</div>
+        <table>${overviewRows}</table>
+      </div>
+      <div class="card">
+        <div class="card-title">By Drive Code</div>
+        <table>${tableRows_(driveCounts)}</table>
+      </div>
+      <div class="card">
+        <div class="card-title">By Entity</div>
+        <table>${tableRows_(entityCounts)}</table>
+      </div>
+      <div class="card">
+        <div class="card-title">By Doc Type</div>
+        <table>${tableRows_(docCounts)}</table>
+      </div>
+    </div>
+  `;
 
-  // Title
-  const titleRange = dash.getRange(r, 1, 1, 4);
-  titleRange.merge().setValue('📊 KAL Registry Summary Dashboard')
-            .setBackground(HEADER_BLUE).setFontColor('#ffffff')
-            .setFontWeight('bold').setFontSize(14)
-            .setHorizontalAlignment('center');
-  dash.setRowHeight(r, 36);
-  r++;
+  const cardRows = Math.max(
+    Object.keys(driveCounts).length,
+    Object.keys(entityCounts).length,
+    Object.keys(docCounts).length,
+    7
+  );
+  const dialogHeight = Math.min(120 + cardRows * 28, 600);
 
-  // Generated date
-  dash.getRange(r, 1, 1, 4).merge()
-      .setValue('Generated: ' + new Date().toLocaleString())
-      .setFontColor('#888').setFontSize(10).setHorizontalAlignment('center');
-  r += 2;
-
-  // ── Overview totals ──
-  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Metric'));
-  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Count'));
-  r++;
-  const overviewData = [
-    ['Total Files', totalFiles],
-    ['vFINAL', vFinalCount],
-    ['In Progress', inProgress],
-    ['Errors', statusCounts.error],
-    ['Missing from Drive', statusCounts.notFound],
-    ['Non-KAL files', statusCounts.nonKal],
-    ['OK (KAL check passes)', statusCounts.ok]
-  ];
-  overviewData.forEach(row => {
-    dash.getRange(r, 1, 1, 2).merge().setValue(row[0]).setFontSize(11);
-    dash.getRange(r, 3, 1, 2).merge().setValue(row[1]).setFontSize(11).setHorizontalAlignment('center');
-    if (row[0] === 'vFINAL') dash.getRange(r, 1).setFontColor('#1a7f37');
-    if (row[0] === 'Errors') dash.getRange(r, 1).setFontColor('#c0392b');
-    r++;
-  });
-  r++;
-
-  // ── Drive Code breakdown ──
-  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Drive Code'));
-  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Files'));
-  r++;
-  Object.entries(driveCounts).sort((a, b) => b[1] - a[1]).forEach(([code, cnt]) => {
-    dash.getRange(r, 1, 1, 2).merge().setValue(code).setFontSize(11);
-    dash.getRange(r, 3, 1, 2).merge().setValue(cnt).setFontSize(11).setHorizontalAlignment('center');
-    r++;
-  });
-  r++;
-
-  // ── Entity Code breakdown ──
-  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Entity Code'));
-  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Files'));
-  r++;
-  Object.entries(entityCounts).sort((a, b) => b[1] - a[1]).forEach(([code, cnt]) => {
-    dash.getRange(r, 1, 1, 2).merge().setValue(code).setFontSize(11);
-    dash.getRange(r, 3, 1, 2).merge().setValue(cnt).setFontSize(11).setHorizontalAlignment('center');
-    r++;
-  });
-  r++;
-
-  // ── Doc Type breakdown ──
-  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Doc Type'));
-  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Files'));
-  r++;
-  Object.entries(docCounts).sort((a, b) => b[1] - a[1]).slice(0, 20).forEach(([code, cnt]) => {
-    dash.getRange(r, 1, 1, 2).merge().setValue(code).setFontSize(11);
-    dash.getRange(r, 3, 1, 2).merge().setValue(cnt).setFontSize(11).setHorizontalAlignment('center');
-    r++;
-  });
-
-  // Column widths
-  dash.setColumnWidth(1, 30);
-  dash.setColumnWidth(2, 200);
-  dash.setColumnWidth(3, 30);
-  dash.setColumnWidth(4, 80);
-
-  // Activate the dashboard
-  ss.setActiveSheet(dash);
-  toast('Dashboard created with ' + totalFiles + ' file(s).', '📊 Dashboard', 5);
+  SpreadsheetApp.getUi().showModalDialog(
+    HtmlService.createHtmlOutput(html).setWidth(720).setHeight(dialogHeight),
+    '📊 KAL Registry Summary'
+  );
 }
 
 // ── Feature 5: Missing Files Report ──────────────────────────────────────────
