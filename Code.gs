@@ -1030,7 +1030,8 @@ function showFileVersions() {
     // Simpler than extractKALBaseName regex — avoids false negatives on unusual patterns.
     const n = name.toLowerCase();
     if (n !== baseLower && !n.startsWith(baseLower + '_')) return;
-    seenIds.add(file.getId());
+    const fileId = file.getId();
+    seenIds.add(fileId);
 
     const dateMatch = name.match(/_(\d{8})/);
     const verMatch  = name.match(/_v(\d+|FINAL)$/i);
@@ -1041,6 +1042,7 @@ function showFileVersions() {
     const par    = file.getParents();
     const folder = par.hasNext() ? par.next() : null;
     found.push({
+      fileId,
       name,
       url:        file.getUrl(),
       date,
@@ -1051,37 +1053,75 @@ function showFileVersions() {
     });
   }
 
-  function scanFolder_(folderId) {
-    try {
-      const it = DriveApp.getFolderById(folderId).getFiles();
-      while (it.hasNext()) collectFile_(it.next());
-    } catch (_) {}
+  const MAX_BFS_DEPTH = 5;
+
+  function scanFolderBFS_(rootFolderId) {
+    const queue = [{ id: rootFolderId, depth: 0 }];
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift();
+      let folder;
+      try { folder = DriveApp.getFolderById(id); } catch (_) { continue; }
+      try {
+        const it = folder.getFiles();
+        while (it.hasNext()) collectFile_(it.next());
+      } catch (_) {}
+      if (depth < MAX_BFS_DEPTH) {
+        try {
+          const subs = folder.getFolders();
+          while (subs.hasNext()) queue.push({ id: subs.next().getId(), depth: depth + 1 });
+        } catch (_) {}
+      }
+    }
   }
 
   try {
-    // 1. Search the current file's own folder via col G link — works for Shared
-    //    Drives where DriveApp.searchFiles may not return all members' files.
+    // 1. BFS from the registered drive folder (driveUrlLookup) — primary strategy,
+    //    proven to work for Shared Drives where searchFiles is unreliable.
+    const driveCodeMatch = base.match(/^([A-Za-z]{2,4})-/);
+    const driveCode = driveCodeMatch ? driveCodeMatch[1].toUpperCase() : null;
+    let drivedFolderSearched = false;
+    if (driveCode) {
+      try {
+        const levelsData  = getLevelsData();
+        const driveUrl    = levelsData.driveUrlLookup[driveCode];
+        const driveFolderId = driveUrl ? getIdFromUrl(driveUrl) : null;
+        if (driveFolderId) {
+          console.log('showFileVersions: BFS from drive folder for code=' + driveCode + ' id=' + driveFolderId);
+          scanFolderBFS_(driveFolderId);
+          drivedFolderSearched = true;
+        }
+      } catch (e) { console.warn('showFileVersions: drive folder BFS failed: ' + e.message); }
+    }
+
+    // 2. BFS from the archive folder (Settings!C2) — older versions moved by Promote/Archive.
+    try {
+      const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
+      if (archiveId) {
+        console.log('showFileVersions: BFS from archive folder id=' + archiveId);
+        scanFolderBFS_(archiveId);
+      }
+    } catch (e) { console.warn('showFileVersions: archive BFS failed: ' + e.message); }
+
+    // 3. BFS from the current file's own folder via col G link — catches files
+    //    whose drive code folder was not reachable or is a different structure.
     try {
       const linkUrl = sheet.getRange(r, COL.LINK).getRichTextValue().getLinkUrl();
       const fileId  = getIdFromUrl(linkUrl);
       if (fileId) {
         const parents = DriveApp.getFileById(fileId).getParents();
-        while (parents.hasNext()) scanFolder_(parents.next().getId());
+        while (parents.hasNext()) scanFolderBFS_(parents.next().getId());
       }
     } catch (_) {}
 
-    // 2. Broad Drive search by prefix (catches files in other folders / My Drive).
-    const prefixMatch  = base.match(/^([A-Za-z]{2,4}-)/);
-    const searchPrefix = prefixMatch ? prefixMatch[1].toUpperCase() : base;
-    const iter = DriveApp.searchFiles(
-      "title contains '" + searchPrefix + "' and trashed = false"
-    );
-    while (iter.hasNext()) collectFile_(iter.next());
+    // 4. Fallback: searchFiles by prefix (My Drive files not under any registered folder).
+    try {
+      const prefixMatch  = base.match(/^([A-Za-z]{2,4}-)/);
+      const searchPrefix = prefixMatch ? prefixMatch[1].toUpperCase() : base;
+      const iter = DriveApp.searchFiles("title contains '" + searchPrefix + "' and trashed = false");
+      while (iter.hasNext()) collectFile_(iter.next());
+    } catch (_) {}
 
-    // 3. Archive folder (Settings!C2) — older versions moved by Promote/Archive.
-    const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
-    if (archiveId) scanFolder_(archiveId);
-
+    console.log('showFileVersions: base="' + base + '" found=' + found.length);
   } catch (e) {
     toast('Drive search failed: ' + e.message, '❌ Error', 6);
     return;
@@ -1109,11 +1149,19 @@ function showFileVersions() {
     const folderCell = v.folderUrl
       ? `<a href="${v.folderUrl}" target="_blank">${v.folderName}</a>`
       : v.folderName;
-    return `<tr>
+    return `<tr data-id="${v.fileId}">
       <td>${nameCell}</td>
       <td style="white-space:nowrap;text-align:center">${v.date || '—'}</td>
       <td style="white-space:nowrap;text-align:center">v${v.ver}</td>
       <td>${folderCell}</td>
+      <td style="text-align:center;width:36px">
+        <button class="del-btn" data-id="${v.fileId}" data-name="${v.name.replace(/"/g,'&quot;')}" title="Move to trash">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+            <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+          </svg>
+        </button>
+      </td>
     </tr>`;
   }).join('');
 
@@ -1130,21 +1178,56 @@ function showFileVersions() {
       tr:hover td{background:#f4f6ff}
       a{color:#1155CC;text-decoration:none}
       a:hover{text-decoration:underline}
+      .del-btn{background:none;border:none;cursor:pointer;color:#999;padding:2px 4px;border-radius:3px;line-height:1;display:inline-flex;align-items:center}
+      .del-btn:hover{color:#c0392b;background:#fdecea}
+      .del-btn:disabled{opacity:.35;cursor:default}
+      tr.deleted td{opacity:.4;text-decoration:line-through}
     </style>
     <h3>📋 All Versions</h3>
-    <p class="sub">${base}&nbsp;&nbsp;·&nbsp;&nbsp;${found.length} version(s) found in Drive</p>
-    <table>
+    <p class="sub" id="sub-line">${base}&nbsp;&nbsp;·&nbsp;&nbsp;${found.length} version(s) found in Drive</p>
+    <table id="ver-table">
       <tr>
         <th>File Name</th>
         <th>Date</th>
         <th>Version</th>
         <th>Drive Location</th>
+        <th></th>
       </tr>
       ${rows}
     </table>
-  `).setWidth(860).setHeight(Math.min(130 + found.length * 38, 500));
+    <script>
+      var remaining = ${found.length};
+      document.getElementById('ver-table').addEventListener('click', function(e) {
+        var btn = e.target.closest('.del-btn');
+        if (!btn) return;
+        var fileId   = btn.dataset.id;
+        var fileName = btn.dataset.name;
+        if (!confirm('Move "' + fileName + '" to trash?')) return;
+        btn.disabled = true;
+        google.script.run
+          .withSuccessHandler(function() {
+            var row = document.querySelector('tr[data-id="' + fileId + '"]');
+            if (row) row.classList.add('deleted');
+            remaining--;
+            document.getElementById('sub-line').textContent =
+              '${base}  ·  ' + remaining + ' version(s) found in Drive';
+          })
+          .withFailureHandler(function(err) {
+            btn.disabled = false;
+            alert('Could not delete: ' + err.message);
+          })
+          .deleteVersionFile_(fileId);
+      });
+    </script>
+  `).setWidth(900).setHeight(Math.min(150 + found.length * 38, 520));
 
   SpreadsheetApp.getUi().showModalDialog(html, '📋 Versions — ' + base);
+}
+
+/** Moves a Drive file to trash. Called from the Show All Versions modal. */
+function deleteVersionFile_(fileId) {
+  if (!fileId) throw new Error('No file ID provided.');
+  DriveApp.getFileById(fileId).setTrashed(true);
 }
 
 function createSelectedFile() {
