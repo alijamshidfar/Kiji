@@ -1017,35 +1017,54 @@ function showFileVersions() {
 
   toast('Searching Drive for all versions…', '🔍 Versions', 30);
 
-  const base    = extractKALBaseName(baseName);
-  const escaped = base.replace(/'/g, "\\'");
-  const found   = [];
+  const base  = extractKALBaseName(baseName);
+  const found = [];
+  const seenIds = new Set();
+
+  function collectFile_(file) {
+    if (seenIds.has(file.getId())) return;
+    const name = file.getName();
+    if (extractKALBaseName(name).toLowerCase() !== base.toLowerCase()) return;
+    seenIds.add(file.getId());
+
+    const dateMatch = name.match(/_(\d{8})/);
+    const verMatch  = name.match(/_v(\d+|FINAL)$/i);
+    const date      = dateMatch ? dateMatch[1] : '';
+    const ver       = verMatch  ? verMatch[1].toUpperCase() : '1';
+    const verNum    = ver === 'FINAL' ? 9999 : parseInt(ver, 10);
+
+    const par    = file.getParents();
+    const folder = par.hasNext() ? par.next() : null;
+    found.push({
+      name,
+      url:        file.getUrl(),
+      date,
+      ver,
+      verNum,
+      folderName: folder ? folder.getName() : '—',
+      folderUrl:  folder ? folder.getUrl()  : ''
+    });
+  }
 
   try {
-    const files = DriveApp.searchFiles("title contains '" + escaped + "'");
-    while (files.hasNext()) {
-      const file = files.next();
-      const name = file.getName();
-      if (extractKALBaseName(name).toLowerCase() !== base.toLowerCase()) continue;
+    // Search by drive-code prefix (e.g. "OP-") — the same broad query used by
+    // rebuildCollectGroups_. A full-base-name "title contains" query can miss
+    // files in shared drives or return only the most recent indexed result.
+    const prefixMatch  = base.match(/^([A-Za-z]{2,4}-)/);
+    const searchPrefix = prefixMatch ? prefixMatch[1].toUpperCase() : base;
+    const iter = DriveApp.searchFiles(
+      "title contains '" + searchPrefix + "' and trashed = false"
+    );
+    while (iter.hasNext()) collectFile_(iter.next());
 
-      const dateMatch = name.match(/_(\d{8})/);
-      const verMatch  = name.match(/_v(\d+|FINAL)$/i);
-      const date      = dateMatch ? dateMatch[1] : '';
-      const ver       = verMatch  ? verMatch[1].toUpperCase() : '1';
-      const verNum    = ver === 'FINAL' ? 9999 : parseInt(ver, 10);
-
-      const par    = file.getParents();
-      const folder = par.hasNext() ? par.next() : null;
-
-      found.push({
-        name,
-        url:        file.getUrl(),
-        date,
-        ver,
-        verNum,
-        folderName: folder ? folder.getName() : '—',
-        folderUrl:  folder ? folder.getUrl()  : ''
-      });
+    // Also search the archive folder (Settings!C2) — older versions moved there
+    // by Promote to vFINAL or Archive Older Versions won't show up above.
+    const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
+    if (archiveId) {
+      try {
+        const af = DriveApp.getFolderById(archiveId).getFiles();
+        while (af.hasNext()) collectFile_(af.next());
+      } catch (_) {}
     }
   } catch (e) {
     toast('Drive search failed: ' + e.message, '❌ Error', 6);
