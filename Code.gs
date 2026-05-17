@@ -1144,13 +1144,19 @@ function showFileVersions() {
     return b.verNum - a.verNum;
   });
 
+  const latestVerIdx = found.reduce((best, v, i) => v.verNum > found[best].verNum ? i : best, 0);
+
   const rows = found.map((v, i) => {
-    const latestBadge = i === 0 ? ' <span class="badge-latest">Latest</span>' : '';
-    const nameCell   = `<a href="${v.url}" target="_blank">${v.name}</a>${latestBadge}`;
+    const isLatestDate = i === 0;
+    const isLatestVer  = i === latestVerIdx;
+    const badges = (isLatestDate ? ' <span class="badge-date">Latest Date</span>' : '') +
+                   (isLatestVer  ? ' <span class="badge-ver">Latest Version</span>' : '');
+    const nameCell   = `<a href="${v.url}" target="_blank">${v.name}</a>${badges}`;
     const folderCell = v.folderUrl
       ? `<a href="${v.folderUrl}" target="_blank">${v.folderName}</a>`
       : v.folderName;
-    return `<tr data-id="${v.fileId}"${i === 0 ? ' class="row-latest"' : ''}>
+    const rowClass = (isLatestDate || isLatestVer) ? ' class="row-marked"' : '';
+    return `<tr data-id="${v.fileId}"${rowClass}>
       <td>${nameCell}</td>
       <td style="white-space:nowrap;text-align:center">${v.date || '—'}</td>
       <td style="white-space:nowrap;text-align:center">v${v.ver}</td>
@@ -1183,9 +1189,11 @@ function showFileVersions() {
       .del-btn:hover{color:#c0392b;background:#fdecea}
       .del-btn:disabled{opacity:.35;cursor:default}
       tr.deleted td{opacity:.4;text-decoration:line-through}
-      tr.row-latest td{background:#f0f4ff}
-      tr.row-latest:hover td{background:#e4ecff}
-      .badge-latest{display:inline-block;margin-left:7px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.4px;background:#111184;color:#fff;border-radius:10px;vertical-align:middle;text-transform:uppercase}
+      tr.row-marked td{background:#f0f4ff}
+      tr.row-marked:hover td{background:#e4ecff}
+      .badge-date,.badge-ver{display:inline-block;margin-left:6px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.4px;border-radius:10px;vertical-align:middle;text-transform:uppercase}
+      .badge-date{background:#111184;color:#fff}
+      .badge-ver{background:#1a7f37;color:#fff}
     </style>
     <h3>📋 All Versions</h3>
     <p class="sub" id="sub-line">${base}&nbsp;&nbsp;·&nbsp;&nbsp;${found.length} version(s) found in Drive</p>
