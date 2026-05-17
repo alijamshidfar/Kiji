@@ -38,7 +38,8 @@ const COLOR = Object.freeze({
   YELLOW: '#fff2cc',  // 🟡 Priority 2 – valid name, file missing in Drive
   GREEN:  '#d9ead3',  // 🟢 Priority 3 – finalized (vFINAL)
   ERROR:  '#fff2cc',  // amber – script error during batch (same as yellow)
-  NONE:   null        // no highlight
+  NONE:    null,       // no highlight
+  NON_KAL: '#f3f3f3'  // light grey — non-KAL files from root folder scan
 });
 
 // ── Header / separator colours ───────────────────────────────────────────────
