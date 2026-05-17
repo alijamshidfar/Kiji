@@ -483,7 +483,11 @@ function renumberAllRows_(sheet) {
   if (last < DATA_START) return;
   const n     = last - DATA_START + 1;
   const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
-  const links = sheet.getRange(DATA_START, COL.LINK,     n, 1).getValues();
+  // Use col D (file type) rather than col G (HYPERLINK formula) to determine whether a file
+  // exists. Col D is written as a literal value via setValues(), so it is always immediately
+  // readable. Col G contains a formula whose cached display value can be stale immediately
+  // after setFormula(), causing renumberAllRows_ to miss file rows and leave col A blank.
+  const types = sheet.getRange(DATA_START, COL.FILETYPE, n, 1).getValues();
 
   let seq = 0;
   const values  = [];
@@ -494,7 +498,7 @@ function renumberAllRows_(sheet) {
 
   names.forEach((row, i) => {
     const hasFile    = !!row[0];
-    const fileExists = hasFile && links[i][0] !== 'File not found';
+    const fileExists = hasFile && !!types[i][0].toString().trim();
     const isPinned   = hasFile && row[0].toString().startsWith(PINNED_FILE_BASE);
 
     if (isPinned) {
@@ -1726,6 +1730,10 @@ function rebuildRegistryFromDrive() {
   // page refresh.  rebuildInsertLogo_ removes any stale image before inserting a fresh one.
   rebuildInsertLogo_(sheet);
 
+  // Activate cell A1 to force the Google Sheets UI to re-render the full sheet,
+  // making col A numbers and the logo visible without a manual page refresh.
+  try { sheet.getRange(1, 1).activate(); } catch (_) {}
+
   // =AI() formulas are written per-row by processAuditForRow (only on empty cells).
   // No separate refresh pass needed after rebuild.
 }
@@ -1902,6 +1910,7 @@ function rebuildCollectNonKalFiles_(kalFileIds) {
       const f = files.next();
       if (kalFileIds.has(f.getId())) continue;
       const name = f.getName();
+      if (name.startsWith('Help')) continue;
       if (!KAL_RE.test(name) || !name.includes('_')) nonKal.push(f);
     }
     if (depth < MAX_DEPTH) {
@@ -2039,6 +2048,7 @@ function rebuildInsertLogo_(sheet) {
     // High-res source (800×800) downsampled to 50×50 renders crisply.
     const img = sheet.insertImage(blob, 1, 1, 10, 5);
     if (img) { img.setWidth(50).setHeight(50); }
+    Utilities.sleep(500); // allow Sheets to process the image before flushing
     SpreadsheetApp.flush();
     console.log('Logo inserted successfully (contentType=' + ct + ')');
   } catch (e) {
