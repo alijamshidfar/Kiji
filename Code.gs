@@ -645,12 +645,17 @@ function removeDuplicateFilenames_(sheet) {
   const toDelete = [];
 
   for (let i = 0; i < n; i++) {
-    const fn = (names[i][0] || '').toString().trim().toLowerCase();
+    const fn = (names[i][0] || '').toString().trim();
     if (!fn) continue;
-    if (seen.has(fn)) {
+    // Non-KAL files can legitimately share the same name across different subfolders
+    // (e.g. two "Budget.xlsx" files in separate project folders).  Only deduplicate
+    // rows that follow the KAL naming convention.
+    if (!/^[A-Z]{2,4}-[A-Z]/.test(fn) || !fn.includes('_')) continue;
+    const key = fn.toLowerCase();
+    if (seen.has(key)) {
       toDelete.push(DATA_START + i); // mark for deletion (later occurrence)
     } else {
-      seen.add(fn);
+      seen.add(key);
     }
   }
 
@@ -677,6 +682,9 @@ function buildGroups_(sheet) {
   for (let i = 0; i < n; i++) {
     const fn = (names[i][0] || '').toString().trim();
     if (!fn) continue;
+    // Non-KAL files must not be touched by consolidateMisplacedRows_ or the spacing
+    // logic — skip them here so they are invisible to all group-management operations.
+    if (!/^[A-Z]{2,4}-[A-Z]/.test(fn) || !fn.includes('_')) continue;
     const m      = fn.match(/^([A-Za-z]{2,4})-/);
     const prefix = m ? m[1].toUpperCase() : '??';
     const r      = DATA_START + i;
