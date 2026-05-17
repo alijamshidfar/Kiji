@@ -2,7 +2,7 @@
  * KAL ACADEMY - Smart File Registry
  *
  * Column layout (Registry sheet):
- *  A(1)  Row number          B(2)  Human-Readable Description
+ *  A(1)  Row number          B(2)  Human-Readable Name
  *  C(3)  Base File Name      D(4)  File Type
  *  E(5)  Current Version     F(6)  Current Folder
  *  G(7)  Link                H(8)  For Who
@@ -222,6 +222,14 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
     dropdownCell.clearDataValidations();
     if (applyBg) sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(null);
     return null;
+  }
+
+  // ── Non-KAL file: does not follow DRIVEPREFIX-ENTITY_DOCTYPE convention ─────
+  if (!/^[A-Z]{2,4}-[A-Z]/.test(baseName) || !baseName.includes('_')) {
+    sheet.getRange(r, COL.KAL_CHECK).setValue('Non-KAL');
+    const nonKalColor = COLOR.NON_KAL;
+    if (applyBg) sheet.getRange(r, COL.DESC, 1, LAST_COL - COL.DESC + 1).setBackground(nonKalColor);
+    return nonKalColor;
   }
 
   // ── Smart CamelCase description extractor ─────────────────────────────────
@@ -1592,6 +1600,10 @@ function rebuildRegistryFromDrive() {
   // 3. Collect Drive files grouped by drive-code prefix
   const groups = rebuildCollectGroups_();
 
+  // Collect all KAL file IDs so the non-KAL scan can skip them
+  const kalFileIds = new Set();
+  Object.values(groups).forEach(arr => arr.forEach(f => kalFileIds.add(f.getId())));
+
   // 4. Render order: defined prefixes first, then others sorted
   const defined = REBUILD_PREFIX_ORDER.filter(p => groups[p] && groups[p].length);
   const others  = Object.keys(groups)
@@ -1648,6 +1660,20 @@ function rebuildRegistryFromDrive() {
       lastFileRow = r++;
     });
   });
+  // Non-KAL files section: files in Settings!E2 Root Folder that don't follow KAL convention
+  const nonKalFiles = rebuildCollectNonKalFiles_(kalFileIds);
+  if (nonKalFiles.length > 0 && lastFileRow >= DATA_START) {
+    for (let b = 0; b < 3; b++) blankRows.push(r + b);
+    r += 3;
+    sheet.getRange(r - 1, 1, 1, COL.OWNER)
+         .setBorder(null, null, true, null, null, null,
+                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+    nonKalFiles.forEach(file => {
+      rebuildWriteNonKalRow_(sheet, r, file);
+      lastFileRow = r++;
+    });
+  }
+
   // 3 trailing blank rows with navy col A + red bottom border to close the registry
   if (lastFileRow >= DATA_START) {
     for (let b = 1; b <= 3; b++) {
@@ -1838,6 +1864,96 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
        .setFormula(`=HYPERLINK("${url}","Link")`);
 }
 
+/**
+ * Recursively searches the Root Folder (Settings!E2) and returns all files
+ * that do NOT follow KAL naming convention and are not already in the KAL
+ * registry.  Limited to MAX_DEPTH folder levels to avoid execution timeouts.
+ */
+function rebuildCollectNonKalFiles_(kalFileIds) {
+  const rootUrl = getUrlFromCell(SHEET.SETTINGS, 'E2');
+  if (!rootUrl) {
+    console.log('Settings!E2 (Root Folder) is empty — skipping non-KAL scan');
+    return [];
+  }
+  const rootId = getIdFromUrl(rootUrl);
+  if (!rootId) { console.warn('Could not extract folder ID from Settings!E2'); return []; }
+
+  let rootFolder;
+  try { rootFolder = DriveApp.getFolderById(rootId); }
+  catch (e) { console.warn('Root Folder not accessible: ' + e.message); return []; }
+
+  const KAL_RE  = /^[A-Z]{2,4}-[A-Z]/;
+  const MAX_DEPTH = 5;
+  const nonKal  = [];
+  const queue   = [{ folder: rootFolder, depth: 0 }];
+
+  while (queue.length > 0) {
+    const { folder, depth } = queue.shift();
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const f = files.next();
+      if (kalFileIds.has(f.getId())) continue;
+      const name = f.getName();
+      if (!KAL_RE.test(name) || !name.includes('_')) nonKal.push(f);
+    }
+    if (depth < MAX_DEPTH) {
+      const subs = folder.getFolders();
+      while (subs.hasNext()) queue.push({ folder: subs.next(), depth: depth + 1 });
+    }
+  }
+
+  nonKal.sort((a, b) => a.getName().localeCompare(b.getName()));
+  console.log('Non-KAL scan: found ' + nonKal.length + ' file(s) in Root Folder');
+  return nonKal;
+}
+
+/** Writes one non-KAL file's data into a registry row. */
+function rebuildWriteNonKalRow_(sheet, r, driveFile) {
+  const name   = driveFile.getName();
+  const url    = driveFile.getUrl();
+  const mime   = driveFile.getMimeType();
+  const par    = driveFile.getParents();
+  const folder = par.hasNext() ? par.next() : null;
+
+  const folderName = folder ? folder.getName() : '';
+  const folderUrl  = folder ? folder.getUrl()  : '';
+
+  const rowRange = sheet.getRange(r, 1, 1, COL.OWNER);
+  rowRange.setBackground(null)
+          .setFontColor(null)
+          .setFontWeight('normal')
+          .setHorizontalAlignment('left')
+          .setValues([[
+            '',                   // A: row number (set by renumberAllRows_)
+            name,                 // B: human-readable name
+            name,                 // C: base file name
+            formatMimeType(mime), // D: file type
+            '',                   // E: version
+            '',                   // F: folder (hyperlink below)
+            '',                   // G: link (hyperlink below)
+            '',                   // H: for who
+            'Non-KAL',            // I: KAL check
+            '',                   // J: destination drive
+            '',                   // K: preferred template
+            '',                   // L: abstract
+            ''                    // M: owner
+          ]]);
+
+  sheet.getRange(r, COL.ROW_NUM)
+       .setBackground(HEADER_BLUE)
+       .setFontColor('#ffffff')
+       .setFontWeight('bold')
+       .setHorizontalAlignment('center');
+
+  sheet.getRange(r, COL.VERSION).setHorizontalAlignment('center');
+
+  if (folderUrl) {
+    const safeFolder = folderName.replace(/"/g, "'");
+    sheet.getRange(r, COL.FOLDER).setFormula(`=HYPERLINK("${folderUrl}","${safeFolder}")`);
+  }
+  sheet.getRange(r, COL.LINK).setFormula(`=HYPERLINK("${url}","Link")`);
+}
+
 /** Fills a full row with the separator red (blank text — visual group divider). */
 function rebuildWriteSeparator_(sheet, r) {
   sheet.getRange(r, 1, 1, COL.OWNER)
@@ -1852,7 +1968,7 @@ function rebuildWriteSeparator_(sheet, r) {
 function rebuildFormatHeader_(sheet) {
   const headers = [
     '',                                  // A: logo (floating image — value stays blank)
-    'Human-Readable\nDescription',       // B
+    'Human-Readable\nName',              // B
     'Base File Name',                    // C
     'File Type',                         // D
     'Current\nVersion',                  // E
