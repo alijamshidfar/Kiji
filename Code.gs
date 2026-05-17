@@ -46,12 +46,20 @@ function onOpen() {
       .addItem('🧹 Keep Only Latest Version', 'keepOnlyLatestVersion')
       .addItem('📦 Archive Older Versions',   'archiveOlderVersions')
       .addItem('🛠️ Repair Broken Links',      'repairBrokenLinks')
-      .addItem('🧼 Clear All Diagnostics',    'clearAllDiagnostics'))
+      .addItem('🧼 Clear All Diagnostics',    'clearAllDiagnostics')
+      .addSeparator()
+      .addItem('📦 Bulk Archive Selected Rows', 'bulkArchiveSelected'))
     .addSeparator()
 
     // ── Reports & View sub-menu ─────────────────────────────────────────────
     .addSubMenu(ui.createMenu('📊 Reports & View')
       .addItem('📊 Generate Health Report', 'generateHealthReport')
+      .addItem('📊 Summary Dashboard',       'generateSummaryDashboard')
+      .addItem('📭 Missing Files Report',    'showMissingFilesReport')
+      .addItem('🔁 Detect Duplicates',       'detectDuplicates')
+      .addItem('⏰ Flag Stale Files',         'flagStaleFiles')
+      .addItem('🔍 Filter Registry',         'showFilterSidebar')
+      .addSeparator()
       .addItem('📤 Export Registry to PDF', 'exportRegistryToPDF')
       .addItem('🌓 Toggle Compact View',    'toggleCompactView')
       .addItem('👁️ Toggle Done Rows',        'toggleDoneRows'))
@@ -1146,22 +1154,73 @@ function showFileVersions() {
 
   const latestVerIdx = found.reduce((best, v, i) => v.verNum > found[best].verNum ? i : best, 0);
 
+  // ── Feature 6: Version gap detection ─────────────────────────────────────
+  // Build sorted-by-verNum list (excluding FINAL=9999) to detect gaps
+  const verNums = found
+    .map((v, i) => ({ verNum: v.verNum, idx: i }))
+    .filter(v => v.verNum !== 9999)
+    .sort((a, b) => a.verNum - b.verNum);
+
+  const gapAfterIdx  = new Set(); // original found[] index: gap AFTER this entry
+  const gapBeforeIdx = new Set(); // original found[] index: gap BEFORE this entry
+  for (let g = 0; g < verNums.length - 1; g++) {
+    if (verNums[g + 1].verNum - verNums[g].verNum > 1) {
+      const missingVer = verNums[g].verNum + 1;
+      // Mark the entries adjacent to the gap
+      gapAfterIdx.add(verNums[g].idx);
+      gapBeforeIdx.add(verNums[g + 1].idx);
+    }
+  }
+
+  // ── Feature 9: Load changelog notes from Changelog sheet ─────────────────
+  const changelogMap = {};
+  try {
+    const clSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Changelog');
+    if (clSheet && clSheet.getLastRow() >= 2) {
+      const clData = clSheet.getRange(2, 1, clSheet.getLastRow() - 1, 2).getValues();
+      clData.forEach(row => { if (row[0]) changelogMap[row[0]] = row[1] || ''; });
+    }
+  } catch (_) {}
+
   const rows = found.map((v, i) => {
     const isLatestDate = i === 0;
     const isLatestVer  = i === latestVerIdx;
+
+    // Gap warning icons
+    let gapWarning = '';
+    if (gapAfterIdx.has(i)) {
+      const nextVer = v.verNum + 1;
+      gapWarning += ` <span title="Gap: v${nextVer} is missing" style="cursor:help">⚠️</span>`;
+    }
+    if (gapBeforeIdx.has(i)) {
+      const prevVer = v.verNum - 1;
+      gapWarning = `<span title="Gap: v${prevVer} is missing" style="cursor:help">⚠️</span> ` + gapWarning;
+    }
+
     const badges = (isLatestDate ? ' <span class="badge-date">Latest Date</span>' : '') +
                    (isLatestVer  ? ' <span class="badge-ver">Latest Version</span>' : '');
-    const nameCell   = `<a href="${v.url}" target="_blank">${v.name}</a>${badges}`;
+    const nameCell   = `<a href="${v.url}" target="_blank">${v.name}</a>${badges}${gapWarning}`;
     const folderCell = v.folderUrl
       ? `<a href="${v.folderUrl}" target="_blank">${v.folderName}</a>`
       : v.folderName;
     const rowClass = (isLatestDate || isLatestVer) ? ' class="row-marked"' : '';
+
+    // Feature 1: Promote button on Latest Version row
+    const promoteBtn = isLatestVer && v.ver !== 'FINAL'
+      ? `<button class="promote-btn" data-id="${v.fileId}" data-name="${v.name.replace(/"/g,'&quot;')}" title="Promote to vFINAL">🏁</button>`
+      : '';
+
+    // Feature 9: Notes (changelog) cell — contenteditable
+    const existingNote = (changelogMap[v.fileId] || '').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
     return `<tr data-id="${v.fileId}"${rowClass}>
       <td>${nameCell}</td>
       <td style="white-space:nowrap;text-align:center">${v.date || '—'}</td>
       <td style="white-space:nowrap;text-align:center">v${v.ver}</td>
       <td>${folderCell}</td>
-      <td style="text-align:center;width:36px">
+      <td class="notes-cell" contenteditable="true" data-id="${v.fileId}" style="min-width:120px;font-size:11px;color:#555;outline:none;cursor:text">${existingNote}</td>
+      <td style="text-align:center;white-space:nowrap;width:60px">
+        ${promoteBtn}
         <button class="del-btn" data-id="${v.fileId}" data-name="${v.name.replace(/"/g,'&quot;')}" title="Move to trash">
           <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
             <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
@@ -1188,12 +1247,17 @@ function showFileVersions() {
       .del-btn{background:none;border:none;cursor:pointer;color:#999;padding:2px 4px;border-radius:3px;line-height:1;display:inline-flex;align-items:center}
       .del-btn:hover{color:#c0392b;background:#fdecea}
       .del-btn:disabled{opacity:.35;cursor:default}
+      .promote-btn{background:none;border:1px solid #1a7f37;color:#1a7f37;cursor:pointer;padding:2px 6px;border-radius:3px;font-size:12px;margin-right:4px}
+      .promote-btn:hover{background:#d9ead3}
+      .promote-btn:disabled{opacity:.35;cursor:default}
       tr.deleted td{opacity:.4;text-decoration:line-through}
       tr.row-marked td{background:#f0f4ff}
       tr.row-marked:hover td{background:#e4ecff}
       .badge-date,.badge-ver{display:inline-block;margin-left:6px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.4px;border-radius:10px;vertical-align:middle;text-transform:uppercase}
       .badge-date{background:#111184;color:#fff}
       .badge-ver{background:#1a7f37;color:#fff}
+      .notes-cell:focus{background:#fffde7;border:1px solid #f9ab00;border-radius:3px}
+      .notes-cell:empty:before{content:"Add note…";color:#bbb;font-style:italic;pointer-events:none}
     </style>
     <h3>📋 All Versions</h3>
     <p class="sub" id="sub-line">${base}&nbsp;&nbsp;·&nbsp;&nbsp;${found.length} version(s) found in Drive</p>
@@ -1203,12 +1267,15 @@ function showFileVersions() {
         <th>Date</th>
         <th>Version</th>
         <th>Drive Location</th>
+        <th>Notes</th>
         <th></th>
       </tr>
       ${rows}
     </table>
     <script>
       var remaining = ${found.length};
+
+      // ── Delete handler ────────────────────────────────────────────────────
       document.getElementById('ver-table').addEventListener('click', function(e) {
         var btn = e.target.closest('.del-btn');
         if (!btn) return;
@@ -1230,8 +1297,42 @@ function showFileVersions() {
           })
           .deleteVersionFile_(fileId);
       });
+
+      // ── Promote handler (Feature 1) ───────────────────────────────────────
+      document.getElementById('ver-table').addEventListener('click', function(e) {
+        var btn = e.target.closest('.promote-btn');
+        if (!btn) return;
+        var fileId   = btn.dataset.id;
+        var fileName = btn.dataset.name;
+        if (!confirm('Promote "' + fileName + '" to vFINAL?')) return;
+        btn.disabled = true;
+        btn.textContent = '…';
+        google.script.run
+          .withSuccessHandler(function() {
+            google.script.host.close();
+          })
+          .withFailureHandler(function(err) {
+            btn.disabled = false;
+            btn.textContent = '🏁';
+            alert('Promote failed: ' + err.message);
+          })
+          .promoteVersionFromDialog_(fileId);
+      });
+
+      // ── Notes blur-save handler (Feature 9) ──────────────────────────────
+      document.getElementById('ver-table').addEventListener('blur', function(e) {
+        var cell = e.target;
+        if (!cell.classList.contains('notes-cell')) return;
+        var fileId = cell.dataset.id;
+        var note   = cell.innerText.trim();
+        google.script.run
+          .withFailureHandler(function(err) {
+            console.warn('Note save failed: ' + err.message);
+          })
+          .saveVersionChangelog_(fileId, note);
+      }, true);
     </script>
-  `).setWidth(900).setHeight(Math.min(150 + found.length * 38, 520));
+  `).setWidth(980).setHeight(Math.min(160 + found.length * 38, 540));
 
   SpreadsheetApp.getUi().showModalDialog(html, '📋 Versions — ' + base);
 }
@@ -1402,10 +1503,31 @@ function promoteToFinalAndMove() {
     const destId = getIdFromUrl(destUrl);
     if (!destId) { toast('No destination folder found in col J or Settings!A2.', '🛑 Error', 5); return; }
 
-    srcFile.makeCopy(finalName, DriveApp.getFolderById(destId));
+    const newFile = srcFile.makeCopy(finalName, DriveApp.getFolderById(destId));
     srcFile.moveTo(DriveApp.getFolderById(archiveId));
     updateSelectedInfo();
     toast('"' + finalName + '" created in destination drive. Original archived.', '🏁 Promoted', 6);
+
+    // ── Feature 8: Email notification on vFINAL promotion ─────────────────
+    const ownerEmail = sheet.getRange(r, COL.OWNER).getValue().toString().trim();
+    if (ownerEmail && ownerEmail.includes('@')) {
+      try {
+        const promotionDate = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+        MailApp.sendEmail({
+          to:      ownerEmail,
+          subject: '[KAL] ' + finalName + ' promoted to vFINAL',
+          body:    'Hello,\n\nThe following file has been promoted to vFINAL:\n\n' +
+                   'File Name: ' + finalName + '\n' +
+                   'Drive Link: ' + newFile.getUrl() + '\n' +
+                   'Date: ' + promotionDate + '\n\n' +
+                   'The previous version has been moved to the archive folder.\n\n' +
+                   'KAL File Registry'
+        });
+        console.log('promoteToFinalAndMove: notification sent to ' + ownerEmail);
+      } catch (mailErr) {
+        console.warn('promoteToFinalAndMove: email notification failed: ' + mailErr.message);
+      }
+    }
   } catch (e) { toast('Promote failed: ' + e.message, '❌ Error', 6); console.error('promoteToFinalAndMove: ' + e.message); }
 }
 
@@ -2432,4 +2554,625 @@ function rebuildGetLogoBlobFromSettings_() {
     console.warn('Logo from Settings!D2 failed: ' + e.message);
     return null;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ── NEW FEATURES (1–10) ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Feature 1: Promote from Versions dialog ───────────────────────────────────
+
+/**
+ * Called from the Show All Versions modal when the user clicks the Promote
+ * button on the Latest Version row.  Mirrors the core logic of
+ * promoteToFinalAndMove but operates by file ID (not active row).
+ */
+function promoteVersionFromDialog_(fileId) {
+  if (!fileId) throw new Error('No file ID provided.');
+
+  const ss        = SpreadsheetApp.getActiveSpreadsheet();
+  const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
+  if (!archiveId) throw new Error('Archive folder URL missing in Settings!C2.');
+
+  const srcFile   = DriveApp.getFileById(fileId);
+  const name      = srcFile.getName();
+  const baseName  = extractKALBaseName(name);
+  const dateStr   = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyyMMdd');
+  const finalName = baseName + '_' + dateStr + '_vFINAL';
+
+  // Resolve destination folder: Settings!A2 as default
+  const destUrl = getUrlFromCell(SHEET.SETTINGS, 'A2');
+  const destId  = getIdFromUrl(destUrl);
+  if (!destId) throw new Error('No destination folder found in Settings!A2.');
+
+  const newFile = srcFile.makeCopy(finalName, DriveApp.getFolderById(destId));
+  srcFile.moveTo(DriveApp.getFolderById(archiveId));
+
+  // Re-audit the matching registry row if possible
+  try { updateAllInfo(); } catch (_) {}
+  toast('"' + finalName + '" promoted to vFINAL. Original archived.', '🏁 Promoted', 6);
+
+  // Email notification if owner is set on the matching row
+  try {
+    const sheet   = ss.getSheetByName(SHEET.REGISTRY);
+    if (sheet) {
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= DATA_START) {
+        const names = sheet.getRange(DATA_START, COL.FILENAME, lastRow - DATA_START + 1, 1).getValues();
+        for (let i = 0; i < names.length; i++) {
+          if (extractKALBaseName(names[i][0].toString()) === baseName) {
+            const ownerEmail = sheet.getRange(DATA_START + i, COL.OWNER).getValue().toString().trim();
+            if (ownerEmail && ownerEmail.includes('@')) {
+              const promotionDate = Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd HH:mm');
+              MailApp.sendEmail({
+                to:      ownerEmail,
+                subject: '[KAL] ' + finalName + ' promoted to vFINAL',
+                body:    'Hello,\n\nThe following file has been promoted to vFINAL:\n\n' +
+                         'File Name: ' + finalName + '\n' +
+                         'Drive Link: ' + newFile.getUrl() + '\n' +
+                         'Date: ' + promotionDate + '\n\n' +
+                         'The previous version has been moved to the archive folder.\n\n' +
+                         'KAL File Registry'
+              });
+            }
+            break;
+          }
+        }
+      }
+    }
+  } catch (mailErr) {
+    console.warn('promoteVersionFromDialog_: email notification failed: ' + mailErr.message);
+  }
+}
+
+// ── Feature 2: Duplicate Detection ───────────────────────────────────────────
+
+/**
+ * Scans Registry col C for rows sharing the same extractKALBaseName().
+ * Highlights duplicates with orange (#f9cb9c) on col B–L.
+ */
+function detectDuplicates() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) { toast('No data rows found.', '⚠️ Warning', 4); return; }
+
+  const n     = lastRow - DATA_START + 1;
+  const names = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+
+  // First pass: count occurrences of each base name
+  const baseCount = {};
+  names.forEach(row => {
+    const fn = (row[0] || '').toString().trim();
+    if (!fn) return;
+    const base = extractKALBaseName(fn).toLowerCase();
+    baseCount[base] = (baseCount[base] || 0) + 1;
+  });
+
+  // Second pass: highlight rows with base names that appear more than once
+  const DUPE_COLOR = '#f9cb9c';
+  const bgs = [];
+  let dupeCount = 0;
+  const dupeBases = new Set();
+
+  names.forEach(row => {
+    const fn = (row[0] || '').toString().trim();
+    if (!fn) {
+      bgs.push(null); // will not be applied to blank rows
+      return;
+    }
+    const base = extractKALBaseName(fn).toLowerCase();
+    if (baseCount[base] > 1) {
+      bgs.push(DUPE_COLOR);
+      dupeBases.add(base);
+    } else {
+      bgs.push(null);
+    }
+  });
+
+  dupeCount = dupeBases.size;
+
+  // Apply backgrounds
+  const bgMatrix = bgs.map(bg => Array(LAST_COL - COL.DESC + 1).fill(bg));
+  sheet.getRange(DATA_START, COL.DESC, n, LAST_COL - COL.DESC + 1).setBackgrounds(bgMatrix);
+
+  toast('Found ' + dupeCount + ' duplicate base name(s). Highlighted in orange.', '🔁 Duplicates', 6);
+}
+
+// ── Feature 3: Stale File Warning ─────────────────────────────────────────────
+
+/**
+ * For each Registry row with a Drive file link, checks getLastUpdated().
+ * Rows not modified in > threshold days get a yellow-orange background on col B
+ * and " ⚠️ Stale" appended to col I.
+ * Settings!F2 = stale threshold in days (default 180).
+ */
+function flagStaleFiles() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) { toast('No data rows found.', '⚠️ Warning', 4); return; }
+
+  // Read stale threshold from Settings!F2
+  let threshold = 180;
+  try {
+    const settingsSheet = ss.getSheetByName(SHEET.SETTINGS);
+    if (settingsSheet) {
+      const val = settingsSheet.getRange('F2').getValue();
+      if (val && !isNaN(parseInt(val, 10))) threshold = parseInt(val, 10);
+    }
+  } catch (_) {}
+
+  const n        = lastRow - DATA_START + 1;
+  const names    = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const linkRich = sheet.getRange(DATA_START, COL.LINK, n, 1).getRichTextValues();
+  const kalChecks = sheet.getRange(DATA_START, COL.KAL_CHECK, n, 1).getValues();
+
+  const now         = new Date();
+  const STALE_COLOR = '#ffe599';
+  let flagged = 0;
+
+  for (let i = 0; i < n; i++) {
+    const fn = (names[i][0] || '').toString().trim();
+    if (!fn) continue;
+
+    let fileUrl = null;
+    try { fileUrl = linkRich[i][0] ? linkRich[i][0].getLinkUrl() : null; } catch (_) {}
+    if (!fileUrl) continue;
+
+    const fileId = getIdFromUrl(fileUrl);
+    if (!fileId) continue;
+
+    try {
+      const file        = DriveApp.getFileById(fileId);
+      const lastUpdated = file.getLastUpdated();
+      const daysSince   = (now - lastUpdated) / (1000 * 60 * 60 * 24);
+
+      if (daysSince > threshold) {
+        const r = DATA_START + i;
+        sheet.getRange(r, COL.DESC).setBackground(STALE_COLOR);
+        const currentCheck = (kalChecks[i][0] || '').toString().trim();
+        if (!currentCheck.includes('⚠️ Stale')) {
+          sheet.getRange(r, COL.KAL_CHECK).setValue(currentCheck ? currentCheck + ' ⚠️ Stale' : '⚠️ Stale');
+        }
+        flagged++;
+      }
+    } catch (e) {
+      console.warn('flagStaleFiles row ' + (DATA_START + i) + ': ' + e.message);
+    }
+  }
+
+  toast('Flagged ' + flagged + ' stale file(s) (>' + threshold + ' days).', '⏰ Stale Files', 6);
+}
+
+// ── Feature 4: Summary Dashboard ─────────────────────────────────────────────
+
+/**
+ * Creates or replaces a "Dashboard" sheet with counts by drive code,
+ * entity code, doc type, KAL status, and version state.
+ */
+function generateSummaryDashboard() {
+  const ss      = SpreadsheetApp.getActiveSpreadsheet();
+  const regSheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!regSheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
+  const lastRow = regSheet.getLastRow();
+  if (lastRow < DATA_START) { toast('No data rows found.', '⚠️ Warning', 4); return; }
+
+  const n        = lastRow - DATA_START + 1;
+  const fileNames = regSheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const versions  = regSheet.getRange(DATA_START, COL.VERSION,  n, 1).getValues();
+  const kalChecks = regSheet.getRange(DATA_START, COL.KAL_CHECK, n, 1).getValues();
+  const linkVals  = regSheet.getRange(DATA_START, COL.LINK, n, 1).getValues();
+
+  const driveCounts  = {};
+  const entityCounts = {};
+  const docCounts    = {};
+  const statusCounts = { ok: 0, error: 0, nonKal: 0, notFound: 0 };
+  let   vFinalCount  = 0;
+  let   inProgress   = 0;
+  let   totalFiles   = 0;
+
+  for (let i = 0; i < n; i++) {
+    const fn = (fileNames[i][0] || '').toString().trim();
+    if (!fn) continue;
+    totalFiles++;
+
+    const parts    = fn.split(/[-_]/);
+    const driveCode  = (fn.match(/^([A-Za-z]{2,4})-/) || [])[1] || '?';
+    const entityCode = parts.length >= 2 ? parts[1].toUpperCase() : '?';
+    const docCode    = parts.length >= 3 ? parts[2].toUpperCase() : '?';
+
+    driveCounts[driveCode]  = (driveCounts[driveCode]  || 0) + 1;
+    entityCounts[entityCode] = (entityCounts[entityCode] || 0) + 1;
+    docCounts[docCode]       = (docCounts[docCode]       || 0) + 1;
+
+    const kalStatus = (kalChecks[i][0] || '').toString().trim();
+    const linkVal   = (linkVals[i][0]  || '').toString().trim();
+    if      (kalStatus === 'Non-KAL')   statusCounts.nonKal++;
+    else if (kalStatus === 'File not found' || linkVal === 'File not found') statusCounts.notFound++;
+    else if (kalStatus && kalStatus !== 'OK') statusCounts.error++;
+    else    statusCounts.ok++;
+
+    const ver = (versions[i][0] || '').toString().trim().toUpperCase();
+    if (ver === 'FINAL') vFinalCount++;
+    else if (fn) inProgress++;
+  }
+
+  // Create or replace Dashboard sheet
+  let dash = ss.getSheetByName('Dashboard');
+  if (dash) {
+    dash.clear();
+  } else {
+    dash = ss.insertSheet('Dashboard');
+  }
+
+  const headerStyle = (range) => {
+    range.setBackground(HEADER_BLUE)
+         .setFontColor('#ffffff')
+         .setFontWeight('bold')
+         .setFontSize(11)
+         .setHorizontalAlignment('center');
+  };
+
+  let r = 1;
+
+  // Title
+  const titleRange = dash.getRange(r, 1, 1, 4);
+  titleRange.merge().setValue('📊 KAL Registry Summary Dashboard')
+            .setBackground(HEADER_BLUE).setFontColor('#ffffff')
+            .setFontWeight('bold').setFontSize(14)
+            .setHorizontalAlignment('center');
+  dash.setRowHeight(r, 36);
+  r++;
+
+  // Generated date
+  dash.getRange(r, 1, 1, 4).merge()
+      .setValue('Generated: ' + new Date().toLocaleString())
+      .setFontColor('#888').setFontSize(10).setHorizontalAlignment('center');
+  r += 2;
+
+  // ── Overview totals ──
+  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Metric'));
+  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Count'));
+  r++;
+  const overviewData = [
+    ['Total Files', totalFiles],
+    ['vFINAL', vFinalCount],
+    ['In Progress', inProgress],
+    ['Errors', statusCounts.error],
+    ['Missing from Drive', statusCounts.notFound],
+    ['Non-KAL files', statusCounts.nonKal],
+    ['OK (KAL check passes)', statusCounts.ok]
+  ];
+  overviewData.forEach(row => {
+    dash.getRange(r, 1, 1, 2).merge().setValue(row[0]).setFontSize(11);
+    dash.getRange(r, 3, 1, 2).merge().setValue(row[1]).setFontSize(11).setHorizontalAlignment('center');
+    if (row[0] === 'vFINAL') dash.getRange(r, 1).setFontColor('#1a7f37');
+    if (row[0] === 'Errors') dash.getRange(r, 1).setFontColor('#c0392b');
+    r++;
+  });
+  r++;
+
+  // ── Drive Code breakdown ──
+  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Drive Code'));
+  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Files'));
+  r++;
+  Object.entries(driveCounts).sort((a, b) => b[1] - a[1]).forEach(([code, cnt]) => {
+    dash.getRange(r, 1, 1, 2).merge().setValue(code).setFontSize(11);
+    dash.getRange(r, 3, 1, 2).merge().setValue(cnt).setFontSize(11).setHorizontalAlignment('center');
+    r++;
+  });
+  r++;
+
+  // ── Entity Code breakdown ──
+  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Entity Code'));
+  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Files'));
+  r++;
+  Object.entries(entityCounts).sort((a, b) => b[1] - a[1]).forEach(([code, cnt]) => {
+    dash.getRange(r, 1, 1, 2).merge().setValue(code).setFontSize(11);
+    dash.getRange(r, 3, 1, 2).merge().setValue(cnt).setFontSize(11).setHorizontalAlignment('center');
+    r++;
+  });
+  r++;
+
+  // ── Doc Type breakdown ──
+  headerStyle(dash.getRange(r, 1, 1, 2).merge().setValue('Doc Type'));
+  headerStyle(dash.getRange(r, 3, 1, 2).merge().setValue('Files'));
+  r++;
+  Object.entries(docCounts).sort((a, b) => b[1] - a[1]).slice(0, 20).forEach(([code, cnt]) => {
+    dash.getRange(r, 1, 1, 2).merge().setValue(code).setFontSize(11);
+    dash.getRange(r, 3, 1, 2).merge().setValue(cnt).setFontSize(11).setHorizontalAlignment('center');
+    r++;
+  });
+
+  // Column widths
+  dash.setColumnWidth(1, 30);
+  dash.setColumnWidth(2, 200);
+  dash.setColumnWidth(3, 30);
+  dash.setColumnWidth(4, 80);
+
+  // Activate the dashboard
+  ss.setActiveSheet(dash);
+  toast('Dashboard created with ' + totalFiles + ' file(s).', '📊 Dashboard', 5);
+}
+
+// ── Feature 5: Missing Files Report ──────────────────────────────────────────
+
+/**
+ * Shows a modal dialog listing all Registry rows where col G = "File not found".
+ */
+function showMissingFilesReport() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) { toast('No data rows found.', '⚠️ Warning', 4); return; }
+
+  const n         = lastRow - DATA_START + 1;
+  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const linkVals  = sheet.getRange(DATA_START, COL.LINK, n, 1).getValues();
+  const kalChecks = sheet.getRange(DATA_START, COL.KAL_CHECK, n, 1).getValues();
+  const rowNums   = sheet.getRange(DATA_START, COL.ROW_NUM, n, 1).getValues();
+
+  const missing = [];
+  for (let i = 0; i < n; i++) {
+    const linkText = (linkVals[i][0] || '').toString().trim();
+    if (linkText === 'File not found') {
+      missing.push({
+        sheetRow: DATA_START + i,
+        rowNum:   (rowNums[i][0]   || '').toString() || String(DATA_START + i),
+        fileName: (fileNames[i][0] || '').toString().trim(),
+        kalCheck: (kalChecks[i][0] || '').toString().trim()
+      });
+    }
+  }
+
+  if (!missing.length) {
+    SpreadsheetApp.getUi().showModalDialog(
+      HtmlService.createHtmlOutput(
+        '<p style="font-family:Arial;padding:16px;font-size:13px;color:#1a7f37">✅ No missing files found — all rows have Drive links.</p>'
+      ).setWidth(380).setHeight(80),
+      '📭 Missing Files Report'
+    );
+    return;
+  }
+
+  const rows = missing.map(m =>
+    `<tr>
+      <td style="text-align:center;font-weight:bold">${m.rowNum}</td>
+      <td style="word-break:break-word">${m.fileName.replace(/</g,'&lt;')}</td>
+      <td style="color:#888;font-size:11px">${m.kalCheck.replace(/</g,'&lt;')}</td>
+    </tr>`
+  ).join('');
+
+  const html = HtmlService.createHtmlOutput(`
+    <style>
+      body{font-family:Arial,sans-serif;padding:14px 16px;margin:0;font-size:13px}
+      h3{margin:0 0 8px;font-size:15px;color:#111184}
+      .sub{margin:0 0 12px;font-size:11px;color:#888}
+      table{width:100%;border-collapse:collapse}
+      th,td{padding:7px 10px;text-align:left;border-bottom:1px solid #e8e8e8;vertical-align:middle}
+      th{background:#111184;color:#fff;font-size:11px;font-weight:600}
+      tr:last-child td{border-bottom:none}
+      tr:hover td{background:#fff2cc}
+    </style>
+    <h3>📭 Missing Files Report</h3>
+    <p class="sub">${missing.length} row(s) where Drive link = "File not found"</p>
+    <table>
+      <tr><th>#</th><th>File Name</th><th>KAL Check</th></tr>
+      ${rows}
+    </table>
+    <p style="margin-top:10px;font-size:11px;color:#888">Use <em>Create Selected File</em> or add the file to Drive and re-audit to resolve.</p>
+  `).setWidth(700).setHeight(Math.min(200 + missing.length * 36, 500));
+
+  SpreadsheetApp.getUi().showModalDialog(html, '📭 Missing Files — ' + missing.length + ' found');
+}
+
+// ── Feature 7: Bulk Archive Selected Rows ────────────────────────────────────
+
+/**
+ * Archives Drive files for all selected rows to the archive folder (Settings!C2).
+ */
+function bulkArchiveSelected() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+  if (sheet.getName() !== SHEET.REGISTRY) {
+    toast('Switch to the Registry sheet first.', '⚠️ Warning', 4);
+    return;
+  }
+
+  const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
+  if (!archiveId) { toast('Archive folder URL missing in Settings!C2.', '🛑 Error', 5); return; }
+
+  const range = sheet.getActiveRange();
+  if (!range) { toast('Select one or more rows first.', '⚠️ Warning', 4); return; }
+
+  const startRow = range.getRow();
+  const numRows  = range.getNumRows();
+  if (startRow < DATA_START) { toast('Select data rows (not the header).', '⚠️ Warning', 4); return; }
+
+  const archiveFolder = DriveApp.getFolderById(archiveId);
+  let archived = 0, skipped = 0;
+
+  for (let i = 0; i < numRows; i++) {
+    const r = startRow + i;
+    const fn = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
+    if (!fn) { skipped++; continue; }
+
+    let fileUrl = null;
+    try { fileUrl = sheet.getRange(r, COL.LINK).getRichTextValue().getLinkUrl(); } catch (_) {}
+    if (!fileUrl) { skipped++; continue; }
+
+    const fileId = getIdFromUrl(fileUrl);
+    if (!fileId) { skipped++; continue; }
+
+    try {
+      toast('Archiving row ' + r + '…', '📦 Bulk Archive', 5);
+      DriveApp.getFileById(fileId).moveTo(archiveFolder);
+      archived++;
+    } catch (e) {
+      console.error('bulkArchiveSelected row ' + r + ': ' + e.message);
+      skipped++;
+    }
+  }
+
+  toast('Archived ' + archived + ' file(s).' + (skipped ? ' ' + skipped + ' row(s) skipped.' : ''), '📦 Bulk Archive', 6);
+}
+
+// ── Feature 9: Changelog Sheet helpers ───────────────────────────────────────
+
+/**
+ * Ensures a hidden "Changelog" sheet exists and returns it.
+ */
+function getOrCreateChangelogSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Changelog');
+  if (!sheet) {
+    sheet = ss.insertSheet('Changelog');
+    sheet.getRange(1, 1, 1, 2).setValues([['File ID', 'Note']]);
+    sheet.hideSheet();
+  }
+  return sheet;
+}
+
+/**
+ * Saves a version note to the Changelog sheet, keyed by Drive file ID.
+ * Called from the Versions dialog (Feature 9).
+ */
+function saveVersionChangelog_(fileId, note) {
+  if (!fileId) return;
+  const sheet   = getOrCreateChangelogSheet_();
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow >= 2) {
+    const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i][0] === fileId) {
+        sheet.getRange(2 + i, 2).setValue(note || '');
+        return;
+      }
+    }
+  }
+  // Not found: append a new row
+  sheet.appendRow([fileId, note || '']);
+}
+
+// ── Feature 10: Filter/Sort Sidebar ──────────────────────────────────────────
+
+/**
+ * Shows a sidebar with dropdowns to filter the Registry by Drive Code,
+ * Entity, Doc Type, and KAL Status.
+ */
+function showFilterSidebar() {
+  try {
+    const html = HtmlService.createHtmlOutputFromFile('FilterSidebar')
+      .setTitle('🔍 Filter Registry')
+      .setWidth(300);
+    SpreadsheetApp.getUi().showSidebar(html);
+  } catch (e) {
+    toast('Could not load filter sidebar: ' + e.message, '❌ Error', 5);
+  }
+}
+
+/**
+ * Returns unique values for each filter dimension from the Registry.
+ * Called by FilterSidebar.html on load.
+ */
+function getFilterOptions() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) return { driveCodes: [], entities: [], docTypes: [], statuses: [] };
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) return { driveCodes: [], entities: [], docTypes: [], statuses: [] };
+
+  const n         = lastRow - DATA_START + 1;
+  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const kalChecks = sheet.getRange(DATA_START, COL.KAL_CHECK, n, 1).getValues();
+
+  const driveCodes = new Set();
+  const entities   = new Set();
+  const docTypes   = new Set();
+  const statuses   = new Set();
+
+  for (let i = 0; i < n; i++) {
+    const fn = (fileNames[i][0] || '').toString().trim();
+    if (!fn) continue;
+    const parts = fn.split(/[-_]/);
+    const m = fn.match(/^([A-Za-z]{2,4})-/);
+    if (m) driveCodes.add(m[1].toUpperCase());
+    if (parts.length >= 2) entities.add(parts[1].toUpperCase());
+    if (parts.length >= 3) docTypes.add(parts[2].toUpperCase());
+    const status = (kalChecks[i][0] || '').toString().trim();
+    if (status) statuses.add(status.includes('⚠️ Stale') ? '⚠️ Stale' : status === 'OK' ? 'OK' : status === 'Non-KAL' ? 'Non-KAL' : 'Error');
+  }
+
+  return {
+    driveCodes: [...driveCodes].sort(),
+    entities:   [...entities].sort(),
+    docTypes:   [...docTypes].sort(),
+    statuses:   [...statuses].sort()
+  };
+}
+
+/**
+ * Hides rows not matching the selected filters.
+ * Called by FilterSidebar.html on "Apply Filter".
+ */
+function applyRegistryFilter(filters) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) return;
+
+  const n         = lastRow - DATA_START + 1;
+  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const kalChecks = sheet.getRange(DATA_START, COL.KAL_CHECK, n, 1).getValues();
+
+  // First show all rows, then selectively hide
+  sheet.showRows(DATA_START, n);
+
+  const { driveCode, entity, docType, kalStatus } = filters;
+
+  for (let i = 0; i < n; i++) {
+    const fn = (fileNames[i][0] || '').toString().trim();
+    if (!fn) continue; // leave blank/separator rows visible
+
+    const parts   = fn.split(/[-_]/);
+    const rowDrive  = ((fn.match(/^([A-Za-z]{2,4})-/) || [])[1] || '').toUpperCase();
+    const rowEntity = (parts[1] || '').toUpperCase();
+    const rowDoc    = (parts[2] || '').toUpperCase();
+    const rowStatus = (kalChecks[i][0] || '').toString().trim();
+    const rowStatusNorm = rowStatus.includes('⚠️ Stale') ? '⚠️ Stale' : rowStatus === 'OK' ? 'OK' : rowStatus === 'Non-KAL' ? 'Non-KAL' : rowStatus ? 'Error' : '';
+
+    let hide = false;
+    if (driveCode && driveCode !== 'ALL' && rowDrive  !== driveCode) hide = true;
+    if (entity    && entity    !== 'ALL' && rowEntity !== entity)    hide = true;
+    if (docType   && docType   !== 'ALL' && rowDoc    !== docType)   hide = true;
+    if (kalStatus && kalStatus !== 'ALL' && rowStatusNorm !== kalStatus) hide = true;
+
+    if (hide) sheet.hideRows(DATA_START + i);
+  }
+
+  toast('Filter applied.', '🔍 Filter', 3);
+}
+
+/**
+ * Shows all rows in the Registry (clears any active filter).
+ */
+function clearRegistryFilter() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) return;
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= DATA_START) sheet.showRows(DATA_START, lastRow - DATA_START + 1);
+  toast('Filter cleared — all rows visible.', '🔍 Filter', 3);
 }
