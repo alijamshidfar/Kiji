@@ -28,6 +28,8 @@ function onOpen() {
 
     // ── File Operations sub-menu ────────────────────────────────────────────
     .addSubMenu(ui.createMenu('📁 File Operations')
+      .addItem('📋 Show All Versions',      'showFileVersions')
+      .addSeparator()
       .addItem('🏗️ Create Selected File',    'createSelectedFile')
       .addItem('📂 Open Current Folder',     'openCurrentFolder')
       .addItem('🚚 Move to Destination Drive','moveToDestinationDrive')
@@ -991,6 +993,124 @@ function GET_SMART_DETAILS(baseName) {
 }
 
 // ── 6. FILE OPERATIONS ────────────────────────────────────────────────────────
+
+/**
+ * Searches Drive for every version of the file on the active registry row
+ * and shows them in a modal dialog, sorted newest-date-first.
+ * Each file name and folder name is a clickable hyperlink.
+ */
+function showFileVersions() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getActiveSheet();
+  if (sheet.getName() !== SHEET.REGISTRY) {
+    toast('Select a row in the Registry sheet first.', '⚠️ Warning', 4);
+    return;
+  }
+  const r = sheet.getActiveRange().getRow();
+  if (r < DATA_START) {
+    toast('Select a file row (not the header).', '⚠️ Warning', 4);
+    return;
+  }
+
+  const baseName = sheet.getRange(r, COL.FILENAME).getValue().toString().trim();
+  if (!baseName) { toast('No filename in this row.', '⚠️ Warning', 4); return; }
+
+  toast('Searching Drive for all versions…', '🔍 Versions', 30);
+
+  const base    = extractKALBaseName(baseName);
+  const escaped = base.replace(/'/g, "\\'");
+  const found   = [];
+
+  try {
+    const files = DriveApp.searchFiles("title contains '" + escaped + "'");
+    while (files.hasNext()) {
+      const file = files.next();
+      const name = file.getName();
+      if (extractKALBaseName(name).toLowerCase() !== base.toLowerCase()) continue;
+
+      const dateMatch = name.match(/_(\d{8})/);
+      const verMatch  = name.match(/_v(\d+|FINAL)$/i);
+      const date      = dateMatch ? dateMatch[1] : '';
+      const ver       = verMatch  ? verMatch[1].toUpperCase() : '1';
+      const verNum    = ver === 'FINAL' ? 9999 : parseInt(ver, 10);
+
+      const par    = file.getParents();
+      const folder = par.hasNext() ? par.next() : null;
+
+      found.push({
+        name,
+        url:        file.getUrl(),
+        date,
+        ver,
+        verNum,
+        folderName: folder ? folder.getName() : '—',
+        folderUrl:  folder ? folder.getUrl()  : ''
+      });
+    }
+  } catch (e) {
+    toast('Drive search failed: ' + e.message, '❌ Error', 6);
+    return;
+  }
+
+  if (!found.length) {
+    SpreadsheetApp.getUi().showModalDialog(
+      HtmlService.createHtmlOutput(
+        '<p style="font-family:Arial;padding:16px;font-size:13px">No versions found in Drive for:<br><b>' +
+        base + '</b></p>'
+      ).setWidth(400).setHeight(100),
+      '📋 File Versions'
+    );
+    return;
+  }
+
+  // Newest date first; within same date, highest version first
+  found.sort((a, b) => {
+    if (b.date !== a.date) return b.date.localeCompare(a.date);
+    return b.verNum - a.verNum;
+  });
+
+  const rows = found.map(v => {
+    const nameCell   = `<a href="${v.url}" target="_blank">${v.name}</a>`;
+    const folderCell = v.folderUrl
+      ? `<a href="${v.folderUrl}" target="_blank">${v.folderName}</a>`
+      : v.folderName;
+    return `<tr>
+      <td>${nameCell}</td>
+      <td style="white-space:nowrap;text-align:center">${v.date || '—'}</td>
+      <td style="white-space:nowrap;text-align:center">v${v.ver}</td>
+      <td>${folderCell}</td>
+    </tr>`;
+  }).join('');
+
+  const html = HtmlService.createHtmlOutput(`
+    <style>
+      *{box-sizing:border-box}
+      body{font-family:Arial,sans-serif;padding:14px 16px;margin:0;font-size:13px}
+      h3{margin:0 0 3px;font-size:15px;color:#111184}
+      .sub{margin:0 0 12px;font-size:11px;color:#888}
+      table{width:100%;border-collapse:collapse}
+      th,td{padding:7px 11px;text-align:left;border-bottom:1px solid #e8e8e8;vertical-align:middle}
+      th{background:#111184;color:#fff;font-size:12px;font-weight:600;white-space:nowrap}
+      tr:last-child td{border-bottom:none}
+      tr:hover td{background:#f4f6ff}
+      a{color:#1155CC;text-decoration:none}
+      a:hover{text-decoration:underline}
+    </style>
+    <h3>📋 All Versions</h3>
+    <p class="sub">${base}&nbsp;&nbsp;·&nbsp;&nbsp;${found.length} version(s) found in Drive</p>
+    <table>
+      <tr>
+        <th>File Name</th>
+        <th>Date</th>
+        <th>Version</th>
+        <th>Drive Location</th>
+      </tr>
+      ${rows}
+    </table>
+  `).setWidth(860).setHeight(Math.min(130 + found.length * 38, 500));
+
+  SpreadsheetApp.getUi().showModalDialog(html, '📋 Versions — ' + base);
+}
 
 function createSelectedFile() {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
