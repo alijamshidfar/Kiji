@@ -1021,10 +1021,15 @@ function showFileVersions() {
   const found = [];
   const seenIds = new Set();
 
+  const baseLower = base.toLowerCase();
+
   function collectFile_(file) {
     if (seenIds.has(file.getId())) return;
     const name = file.getName();
-    if (extractKALBaseName(name).toLowerCase() !== base.toLowerCase()) return;
+    // Match: exact base name OR base name followed by '_' (date/version suffix).
+    // Simpler than extractKALBaseName regex — avoids false negatives on unusual patterns.
+    const n = name.toLowerCase();
+    if (n !== baseLower && !n.startsWith(baseLower + '_')) return;
     seenIds.add(file.getId());
 
     const dateMatch = name.match(/_(\d{8})/);
@@ -1046,10 +1051,26 @@ function showFileVersions() {
     });
   }
 
+  function scanFolder_(folderId) {
+    try {
+      const it = DriveApp.getFolderById(folderId).getFiles();
+      while (it.hasNext()) collectFile_(it.next());
+    } catch (_) {}
+  }
+
   try {
-    // Search by drive-code prefix (e.g. "OP-") — the same broad query used by
-    // rebuildCollectGroups_. A full-base-name "title contains" query can miss
-    // files in shared drives or return only the most recent indexed result.
+    // 1. Search the current file's own folder via col G link — works for Shared
+    //    Drives where DriveApp.searchFiles may not return all members' files.
+    try {
+      const linkUrl = sheet.getRange(r, COL.LINK).getRichTextValue().getLinkUrl();
+      const fileId  = getIdFromUrl(linkUrl);
+      if (fileId) {
+        const parents = DriveApp.getFileById(fileId).getParents();
+        while (parents.hasNext()) scanFolder_(parents.next().getId());
+      }
+    } catch (_) {}
+
+    // 2. Broad Drive search by prefix (catches files in other folders / My Drive).
     const prefixMatch  = base.match(/^([A-Za-z]{2,4}-)/);
     const searchPrefix = prefixMatch ? prefixMatch[1].toUpperCase() : base;
     const iter = DriveApp.searchFiles(
@@ -1057,15 +1078,10 @@ function showFileVersions() {
     );
     while (iter.hasNext()) collectFile_(iter.next());
 
-    // Also search the archive folder (Settings!C2) — older versions moved there
-    // by Promote to vFINAL or Archive Older Versions won't show up above.
+    // 3. Archive folder (Settings!C2) — older versions moved by Promote/Archive.
     const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
-    if (archiveId) {
-      try {
-        const af = DriveApp.getFolderById(archiveId).getFiles();
-        while (af.hasNext()) collectFile_(af.next());
-      } catch (_) {}
-    }
+    if (archiveId) scanFolder_(archiveId);
+
   } catch (e) {
     toast('Drive search failed: ' + e.message, '❌ Error', 6);
     return;
