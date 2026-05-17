@@ -1910,6 +1910,7 @@ function rebuildCollectNonKalFiles_(kalFileIds) {
       const f = files.next();
       if (kalFileIds.has(f.getId())) continue;
       const name = f.getName();
+      if (name.startsWith('Help')) continue;
       if (!KAL_RE.test(name) || !name.includes('_')) nonKal.push(f);
     }
     if (depth < MAX_DEPTH) {
