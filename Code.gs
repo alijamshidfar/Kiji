@@ -1030,7 +1030,8 @@ function showFileVersions() {
     // Simpler than extractKALBaseName regex — avoids false negatives on unusual patterns.
     const n = name.toLowerCase();
     if (n !== baseLower && !n.startsWith(baseLower + '_')) return;
-    seenIds.add(file.getId());
+    const fileId = file.getId();
+    seenIds.add(fileId);
 
     const dateMatch = name.match(/_(\d{8})/);
     const verMatch  = name.match(/_v(\d+|FINAL)$/i);
@@ -1041,6 +1042,7 @@ function showFileVersions() {
     const par    = file.getParents();
     const folder = par.hasNext() ? par.next() : null;
     found.push({
+      fileId,
       name,
       url:        file.getUrl(),
       date,
@@ -1147,11 +1149,19 @@ function showFileVersions() {
     const folderCell = v.folderUrl
       ? `<a href="${v.folderUrl}" target="_blank">${v.folderName}</a>`
       : v.folderName;
-    return `<tr>
+    return `<tr data-id="${v.fileId}">
       <td>${nameCell}</td>
       <td style="white-space:nowrap;text-align:center">${v.date || '—'}</td>
       <td style="white-space:nowrap;text-align:center">v${v.ver}</td>
       <td>${folderCell}</td>
+      <td style="text-align:center;width:36px">
+        <button class="del-btn" data-id="${v.fileId}" data-name="${v.name.replace(/"/g,'&quot;')}" title="Move to trash">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+            <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+          </svg>
+        </button>
+      </td>
     </tr>`;
   }).join('');
 
@@ -1168,21 +1178,56 @@ function showFileVersions() {
       tr:hover td{background:#f4f6ff}
       a{color:#1155CC;text-decoration:none}
       a:hover{text-decoration:underline}
+      .del-btn{background:none;border:none;cursor:pointer;color:#999;padding:2px 4px;border-radius:3px;line-height:1;display:inline-flex;align-items:center}
+      .del-btn:hover{color:#c0392b;background:#fdecea}
+      .del-btn:disabled{opacity:.35;cursor:default}
+      tr.deleted td{opacity:.4;text-decoration:line-through}
     </style>
     <h3>📋 All Versions</h3>
-    <p class="sub">${base}&nbsp;&nbsp;·&nbsp;&nbsp;${found.length} version(s) found in Drive</p>
-    <table>
+    <p class="sub" id="sub-line">${base}&nbsp;&nbsp;·&nbsp;&nbsp;${found.length} version(s) found in Drive</p>
+    <table id="ver-table">
       <tr>
         <th>File Name</th>
         <th>Date</th>
         <th>Version</th>
         <th>Drive Location</th>
+        <th></th>
       </tr>
       ${rows}
     </table>
-  `).setWidth(860).setHeight(Math.min(130 + found.length * 38, 500));
+    <script>
+      var remaining = ${found.length};
+      document.getElementById('ver-table').addEventListener('click', function(e) {
+        var btn = e.target.closest('.del-btn');
+        if (!btn) return;
+        var fileId   = btn.dataset.id;
+        var fileName = btn.dataset.name;
+        if (!confirm('Move "' + fileName + '" to trash?')) return;
+        btn.disabled = true;
+        google.script.run
+          .withSuccessHandler(function() {
+            var row = document.querySelector('tr[data-id="' + fileId + '"]');
+            if (row) row.classList.add('deleted');
+            remaining--;
+            document.getElementById('sub-line').textContent =
+              '${base}  ·  ' + remaining + ' version(s) found in Drive';
+          })
+          .withFailureHandler(function(err) {
+            btn.disabled = false;
+            alert('Could not delete: ' + err.message);
+          })
+          .deleteVersionFile_(fileId);
+      });
+    </script>
+  `).setWidth(900).setHeight(Math.min(150 + found.length * 38, 520));
 
   SpreadsheetApp.getUi().showModalDialog(html, '📋 Versions — ' + base);
+}
+
+/** Moves a Drive file to trash. Called from the Show All Versions modal. */
+function deleteVersionFile_(fileId) {
+  if (!fileId) throw new Error('No file ID provided.');
+  DriveApp.getFileById(fileId).setTrashed(true);
 }
 
 function createSelectedFile() {
