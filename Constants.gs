@@ -18,7 +18,8 @@ const COL = Object.freeze({
   DEST_DRIVE: 10,  // J
   TEMPLATE:   11,  // K
   ABSTRACT:   12,  // L
-  OWNER:      13   // M — email address for notifications (optional)
+  OWNER:      13,  // M — email address for notifications (optional)
+  CHANGELOG:  14   // N — version changelog notes (stored in Changelog sheet)
 });
 
 const LAST_COL   = COL.ABSTRACT; // rightmost formatted/data column (L)

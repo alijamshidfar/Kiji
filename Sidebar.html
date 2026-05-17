@@ -618,6 +618,10 @@
           <span class="setting-cell">E2</span>
           <span>Root Folder URL — scanned by <em>Rebuild Registry from Drive</em> and <em>Refresh Non-KAL Section</em> to find files that do not follow the KAL naming convention</span>
         </div>
+        <div class="setting-row">
+          <span class="setting-cell">F2</span>
+          <span>Stale threshold in days (default: 180). Files not modified within this period are flagged by <em>Flag Stale Files</em> with a yellow-orange background and <code>⚠️ Stale</code> in col I.</span>
+        </div>
       </div>
       <div class="warn-box" style="margin-top:8px;">
         <strong>Required:</strong> Paste the full Google Drive folder URL into each cell. Functions will error if the cell is empty.
@@ -707,7 +711,7 @@
         <tr>
           <td class="col-letter">B</td>
           <td><span class="badge badge-blue">AUTO</span><br>Description</td>
-          <td>Human-readable name for the file. Used in Abstract formula.</td>
+          <td>Human-readable name for the file. Used in Abstract formula. Background turns <span style="background:#ffe599;padding:0 4px;border-radius:2px">yellow-orange</span> when flagged as stale.</td>
         </tr>
         <tr>
           <td class="col-letter">C</td>
@@ -742,7 +746,7 @@
         <tr>
           <td class="col-letter">I</td>
           <td><span class="badge badge-blue">AUTO</span><br>KAL Name Check</td>
-          <td>Audit result. Blank = pass. Error text = fail (row turns red).</td>
+          <td>Audit result. <code>OK</code> = passes all checks. Error text = fail (row turns red). <code>⚠️ Stale</code> appended when file not modified within the stale threshold.</td>
         </tr>
         <tr>
           <td class="col-letter">J</td>
@@ -761,8 +765,13 @@
         </tr>
         <tr>
           <td class="col-letter">M</td>
-          <td><span class="badge badge-blue">AUTO</span><br>Owner Email</td>
-          <td>Email address for <em>Notify Owner</em> function.</td>
+          <td><span class="badge badge-blue">OPTIONAL</span><br>Owner Email</td>
+          <td>Email address for <em>Notify Owner</em>. Also used for automatic vFINAL promotion email.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">N</td>
+          <td><span class="badge badge-grey">HIDDEN</span><br>Changelog</td>
+          <td>Version notes stored in the hidden <strong>Changelog</strong> sheet, keyed by Drive file ID. Edit inline in the <em>Show All Versions</em> dialog — click the Notes cell and type, changes save on blur.</td>
         </tr>
       </table>
     </div>
@@ -812,7 +821,7 @@
       </div>
       <div class="menu-item blue">
         <span class="fn-name">🔔 Notify Owner</span>
-        <span class="fn-desc">Sends an email to the address in col M for the selected row, with the row's current audit status and a link to the file. Requires Gmail send permission.</span>
+        <span class="fn-desc">Sends an email to the address in col M for the selected row, with the row's current audit status and a link to the file. Requires Gmail send permission. An email is also sent automatically when a file is promoted to vFINAL (via <em>Promote to vFINAL &amp; Move</em> or the Versions dialog).</span>
       </div>
     </div>
   </div>
@@ -825,7 +834,7 @@
     <div class="section-body">
       <div class="menu-item green">
         <span class="fn-name">📋 Show All Versions</span>
-        <span class="fn-desc">Opens a modal listing every Drive version of the selected file. Columns: <strong>File Name</strong> (clickable link) · <strong>Date</strong> (YYYYMMDD) · <strong>Version</strong> (v1 / vFINAL) · <strong>Drive Location</strong> (clickable folder link). Sorted newest date first.</span>
+        <span class="fn-desc">Opens a modal listing every Drive version of the selected file. Columns: <strong>File Name</strong> (clickable link) · <strong>Date</strong> (YYYYMMDD) · <strong>Version</strong> (v1 / vFINAL) · <strong>Drive Location</strong> · <strong>Notes</strong> (editable changelog — click to type, saves on blur). The <em>Latest Version</em> row shows a 🏁 <strong>Promote</strong> button to promote directly to vFINAL. ⚠️ icons appear next to rows adjacent to a version gap (e.g. v1, v3 with v2 missing).</span>
       </div>
       <div class="menu-item blue">
         <span class="fn-name">🏗️ Create Selected File</span>
@@ -841,7 +850,7 @@
       </div>
       <div class="menu-item blue">
         <span class="fn-name">🏁 Promote to vFINAL &amp; Move</span>
-        <span class="fn-desc">Renames the file to <code>vFINAL</code>, moves it to Destination Drive, and archives the previous versioned copy to Settings!C2. Triggers a full row re-audit.</span>
+        <span class="fn-desc">Renames the file to <code>vFINAL</code>, moves it to Destination Drive, and archives the previous versioned copy to Settings!C2. Triggers a full row re-audit. If col M has a valid email address, the owner is automatically notified by email.</span>
       </div>
       <div class="menu-item red">
         <span class="fn-name">🗑️ Remove Selected Version</span>
@@ -884,6 +893,10 @@
         <span class="fn-name">🧼 Clear All Diagnostics</span>
         <span class="fn-desc">Wipes col I (KAL Name Check) and removes all row background colors, resetting the sheet to an unaudited state.</span>
       </div>
+      <div class="menu-item blue">
+        <span class="fn-name">📦 Bulk Archive Selected Rows</span>
+        <span class="fn-desc">Select one or more rows in the Registry, then run this to move each linked Drive file into the archive folder (Settings!C2). Shows progress toasts and a final count. Useful for batch end-of-cycle archiving.</span>
+      </div>
     </div>
   </div>
 
@@ -896,6 +909,26 @@
       <div class="menu-item green">
         <span class="fn-name">📊 Generate Health Report</span>
         <span class="fn-desc">Opens a modal summarizing the registry: total rows, red/yellow/green counts, missing files, finalized %, and a list of all error rows.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">📊 Summary Dashboard</span>
+        <span class="fn-desc">Creates (or replaces) a <strong>Dashboard</strong> sheet with formatted summary tables: totals by Drive Code, Entity, Doc Type, and KAL status (OK / error / Non-KAL / not found), plus vFINAL count vs. in-progress count.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">📭 Missing Files Report</span>
+        <span class="fn-desc">Shows a modal listing every row where col G = <code>File not found</code> (literal text, not a hyperlink). Displays row number, file name, and KAL check status. Use <em>Create Selected File</em> or re-audit to resolve.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">🔁 Detect Duplicates</span>
+        <span class="fn-desc">Scans col C for rows that share the same base name (after stripping date and version suffixes). Highlights all duplicate rows with an orange background (<code>#f9cb9c</code>) and shows a toast with the count of duplicate base names found.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">⏰ Flag Stale Files</span>
+        <span class="fn-desc">For every row with a Drive file link, checks the file's last-modified date. If not modified within the stale threshold (Settings!F2, default 180 days), the row gets a yellow-orange background on col B and <code>⚠️ Stale</code> appended to col I.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">🔍 Filter Registry</span>
+        <span class="fn-desc">Opens a sidebar with dropdowns for Drive Code, Entity, Doc Type, and KAL Status. <strong>Apply Filter</strong> hides rows that don't match. <strong>Clear Filter</strong> restores all rows. Blank separator rows are never hidden.</span>
       </div>
       <div class="menu-item green">
         <span class="fn-name">📤 Export Registry to PDF</span>
