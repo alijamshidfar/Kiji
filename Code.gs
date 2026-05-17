@@ -39,6 +39,7 @@ function onOpen() {
     // ── Maintenance sub-menu ────────────────────────────────────────────────
     .addSubMenu(ui.createMenu('🧹 Maintenance')
       .addItem('🔁 Rebuild Registry from Drive', 'rebuildRegistryFromDrive')
+      .addItem('🗂️ Refresh Non-KAL Section',     'refreshNonKalSection')
       .addSeparator()
       .addItem('🧹 Keep Only Latest Version', 'keepOnlyLatestVersion')
       .addItem('📦 Archive Older Versions',   'archiveOlderVersions')
@@ -1878,6 +1879,101 @@ function rebuildWriteFileRow_(sheet, r, driveFile) {
   }
   sheet.getRange(r, COL.LINK)
        .setFormula(`=HYPERLINK("${url}","Link")`);
+}
+
+/**
+ * Refreshes only the non-KAL file section at the bottom of the registry
+ * without running a full Rebuild Registry from Drive.  All KAL rows are
+ * left untouched; the non-KAL block (everything below the last KAL group's
+ * three separator blank rows) is cleared and re-populated from the Root
+ * Folder defined in Settings!E2.
+ */
+function refreshNonKalSection() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET.REGISTRY);
+  if (!sheet) { toast('Registry sheet not found.', '❌ Error', 5); return; }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < DATA_START) {
+    toast('Registry is empty — run Rebuild Registry from Drive first.', '⚠️ Warning', 5);
+    return;
+  }
+
+  toast('Scanning Drive for non-KAL files…', '🔍 Refreshing', 60);
+
+  const n       = lastRow - DATA_START + 1;
+  const KAL_RE  = /^[A-Z]{2,4}-[A-Z]/;
+
+  // 1. Scan col C to find the last KAL row and collect existing KAL file IDs
+  //    (so the Drive scan can skip files already tracked in the registry).
+  const fileNames = sheet.getRange(DATA_START, COL.FILENAME, n, 1).getValues();
+  const linkRich  = sheet.getRange(DATA_START, COL.LINK,     n, 1).getRichTextValues();
+
+  const kalFileIds = new Set();
+  let lastKalRow   = -1;
+
+  fileNames.forEach((row, i) => {
+    const fn = (row[0] || '').toString().trim();
+    if (!fn || !KAL_RE.test(fn) || !fn.includes('_')) return; // blank or non-KAL — skip
+    lastKalRow = DATA_START + i;
+    try {
+      const url = linkRich[i][0] ? linkRich[i][0].getLinkUrl() : null;
+      const id  = getIdFromUrl(url);
+      if (id) kalFileIds.add(id);
+    } catch (_) {}
+  });
+
+  if (lastKalRow < DATA_START) {
+    toast('No KAL rows found — run Rebuild Registry from Drive first.', '⚠️ Warning', 5);
+    return;
+  }
+
+  // 2. Clear the non-KAL block (lastKalRow+4 onwards).
+  //    Rows lastKalRow+1..+3 are the separator blanks — they are preserved and
+  //    re-stamped below, so any stale content there is corrected without a full clear.
+  const maxRows   = sheet.getMaxRows();
+  const clearFrom = lastKalRow + 4;
+  if (maxRows >= clearFrom) {
+    sheet.getRange(clearFrom, 1, maxRows - clearFrom + 1, COL.OWNER).clear();
+  }
+
+  // 3. Re-stamp the three separator blank rows and their red bottom border.
+  for (let b = 1; b <= 3; b++) {
+    sheet.getRange(lastKalRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
+  }
+  sheet.getRange(lastKalRow + 3, 1, 1, COL.OWNER)
+       .setBorder(null, null, true, null, null, null,
+                  SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+
+  // 4. Collect non-KAL files from Drive (excludes KAL IDs and "Help" prefix).
+  const nonKalFiles = rebuildCollectNonKalFiles_(kalFileIds);
+
+  // 5. Write non-KAL rows and close with three trailing blank rows + border.
+  if (nonKalFiles.length > 0) {
+    let r = lastKalRow + 4;
+    let lastFileRow = lastKalRow;
+    nonKalFiles.forEach(file => {
+      rebuildWriteNonKalRow_(sheet, r, file);
+      lastFileRow = r++;
+    });
+    for (let b = 1; b <= 3; b++) {
+      sheet.getRange(lastFileRow + b, COL.ROW_NUM).setBackground(HEADER_BLUE).setValue('');
+    }
+    sheet.getRange(lastFileRow + 3, 1, 1, COL.OWNER)
+         .setBorder(null, null, true, null, null, null,
+                    SEPARATOR_RED, SpreadsheetApp.BorderStyle.SOLID_THICK);
+  }
+  // If no non-KAL files the separator border at lastKalRow+3 closes the registry.
+
+  // 6. Apply font, re-audit non-KAL rows (sets col I to "Non-KAL"), renumber, flush.
+  applySheetFont_(sheet);
+  renumberAllRows_(sheet);
+  SpreadsheetApp.flush();
+
+  const msg = nonKalFiles.length === 0
+    ? 'No non-KAL files found in Root Folder.'
+    : nonKalFiles.length + ' non-KAL file(s) listed.';
+  toast(msg, '✅ Non-KAL Refreshed', 5);
 }
 
 /**
