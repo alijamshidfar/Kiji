@@ -440,7 +440,9 @@ function isKALFileName(name) {
 
 /** Strips _YYYYMMDD_v{n|FINAL} suffix to return the base name. */
 function extractKALBaseName(name) {
-  const m = name.match(/^(.+?)(?:_\d{8}_v(?:\d+|FINAL))?\s*$/i);
+  // Strip optional date (_YYYYMMDD) AND optional version (_vN or _vFINAL) from the end.
+  // Both parts are optional and independent so files like _v2 (no date) are handled too.
+  const m = name.match(/^(.+?)(?:_\d{8})?(?:_v(?:\d+|FINAL))?\s*$/i);
   return m ? m[1].trim() : name.trim();
 }
 
@@ -942,6 +944,10 @@ function GET_SMART_DETAILS(baseName) {
     const files = DriveApp.searchFiles("title contains '" + base + "'");
     while (files.hasNext()) {
       const file  = files.next();
+      // Skip files whose base name doesn't match exactly — title contains '' is a
+      // substring search and would otherwise pick up unrelated documents (e.g. a
+      // Google Doc whose name merely contains the base name as a prefix).
+      if (extractKALBaseName(file.getName()).toLowerCase() !== base.toLowerCase()) continue;
       const match = file.getName().match(versionRe);
       if (!match) continue;
       const vSuffix = match[1].toUpperCase();
