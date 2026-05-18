@@ -61,11 +61,44 @@ function onOpen() {
       .addItem('📋 DOCTYPE Codes', 'showDocTypeCodes'))
     .addSeparator()
 
-    .addItem('🔔 Notify Owner',        'notifyOwner')
-    .addItem('📖 Show The User Guide', 'showUserGuide')
+    .addItem('🔔 Notify Owner',           'notifyOwner')
+    .addItem('📖 Show The User Guide',    'showUserGuide')
+    .addSeparator()
+    .addItem('⚙️ Enable Auto-Scan on Open', 'setupAutoScanOnOpen')
     .addToUi();
 
   try { updateTemplateDropdown(); } catch (_) { /* non-fatal on open */ }
+}
+
+/**
+ * One-time setup: creates an installable onOpen trigger that runs
+ * searchMissingKALFiles automatically every time the spreadsheet opens.
+ * Installable triggers have full Drive authorization; simple onOpen does not.
+ * Safe to run multiple times — removes any existing trigger first.
+ */
+function setupAutoScanOnOpen() {
+  // Remove any existing trigger for autoScanOnOpen_ to avoid duplicates
+  ScriptApp.getProjectTriggers().forEach(t => {
+    if (t.getHandlerFunction() === 'autoScanOnOpen_') {
+      ScriptApp.deleteTrigger(t);
+    }
+  });
+
+  ScriptApp.newTrigger('autoScanOnOpen_')
+    .forSpreadsheet(SpreadsheetApp.getActiveSpreadsheet())
+    .onOpen()
+    .create();
+
+  toast('Auto-Scan enabled — missing files will be added each time this sheet opens.', '✅ Trigger Set', 6);
+}
+
+/** Called by the installable onOpen trigger — runs with full Drive authorization. */
+function autoScanOnOpen_() {
+  try {
+    searchMissingKALFiles();
+  } catch (e) {
+    console.error('autoScanOnOpen_: ' + e.message);
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
