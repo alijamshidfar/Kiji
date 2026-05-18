@@ -81,17 +81,31 @@ function onOpen() {
 function setupAutoScanTrigger() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // Remove any existing triggers for this function to avoid duplicates.
+  // Remove any existing triggers for both handler names to avoid duplicates.
   ScriptApp.getProjectTriggers()
-    .filter(t => t.getHandlerFunction() === 'searchMissingKALFiles')
+    .filter(t => t.getHandlerFunction() === 'searchMissingKALFiles' ||
+                 t.getHandlerFunction() === 'autoScanOnOpen_')
     .forEach(t => ScriptApp.deleteTrigger(t));
 
-  ScriptApp.newTrigger('searchMissingKALFiles')
+  ScriptApp.newTrigger('autoScanOnOpen_')
     .forSpreadsheet(ss)
     .onOpen()
     .create();
 
   toast('Auto-scan on open is now active. The registry will update every time this spreadsheet is opened.', '✅ Trigger Set', 6);
+}
+
+/**
+ * Installable-trigger entry point for auto-scan on open.
+ * Throttled to once per hour so repeated opens don't re-scan Drive.
+ */
+function autoScanOnOpen_() {
+  const props = PropertiesService.getScriptProperties();
+  const THROTTLE_MS = 60 * 60 * 1000; // 1 hour
+  const lastRun = Number(props.getProperty('autoScanLastRun') || 0);
+  if (Date.now() - lastRun < THROTTLE_MS) return;
+  props.setProperty('autoScanLastRun', String(Date.now()));
+  searchMissingKALFiles(true);
 }
 
 // ── Sheet font default ────────────────────────────────────────────────────────
@@ -367,8 +381,9 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
 /**
  * Scans Drive for KAL files not yet in the registry and inserts them below
  * their matching drive-code section, then audits each new row immediately.
+ * @param {boolean} [silentMode] When true (auto-scan), skip per-row audit for faster open.
  */
-function searchMissingKALFiles() {
+function searchMissingKALFiles(silentMode) {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
   // Always operate on the Registry sheet — the active sheet may be different
   // when this is called automatically from onOpen().
@@ -506,19 +521,21 @@ function searchMissingKALFiles() {
     newRowStart[code] = afterRow + 1;
   }
 
-  // Immediately audit new rows
-  let templateList;
-  try { templateList = getTemplateList(); }
-  catch (e) { console.error('searchMissingKALFiles audit setup: ' + e.message); }
+  // Immediately audit new rows (skip in silent/auto-scan mode for faster open)
+  if (!silentMode) {
+    let templateList;
+    try { templateList = getTemplateList(); }
+    catch (e) { console.error('searchMissingKALFiles audit setup: ' + e.message); }
 
-  if (levelsData) {
-    for (const code of insertOrder) {
-      const count = missing[code].length;
-      for (let i = 0; i < count; i++) {
-        const r = newRowStart[code] + i;
-        try {
-          processAuditForRow(sheet, r, levelsData.driveUrlLookup, levelsData.validEntities, levelsData.validDocs, templateList);
-        } catch (e) { console.error('searchMissingKALFiles audit row ' + r + ': ' + e.message); }
+    if (levelsData) {
+      for (const code of insertOrder) {
+        const count = missing[code].length;
+        for (let i = 0; i < count; i++) {
+          const r = newRowStart[code] + i;
+          try {
+            processAuditForRow(sheet, r, levelsData.driveUrlLookup, levelsData.validEntities, levelsData.validDocs, templateList);
+          } catch (e) { console.error('searchMissingKALFiles audit row ' + r + ': ' + e.message); }
+        }
       }
     }
   }
