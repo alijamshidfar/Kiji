@@ -27,7 +27,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'Google Sans', Arial, sans-serif;
+    font-family: Georgia, serif;
     font-size: 12.5px;
     color: var(--text);
     background: #fff;
@@ -48,8 +48,9 @@
   }
   .header-top {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     margin-bottom: 10px;
   }
   .header-logo {
@@ -73,10 +74,10 @@
     font-size: 22px;
     flex-shrink: 0;
   }
-  .header-title { flex: 1; }
+  .header-title { text-align: center; }
   .header-title h1 {
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 20px;
+    font-weight: 400;
     letter-spacing: .3px;
     line-height: 1.2;
   }
@@ -503,7 +504,7 @@
       <span class="icon">▼</span>
     </div>
     <div class="section-body">
-      <p>The <strong>KAL Smart File Registry</strong> is a Google Sheets-based document control system that tracks every KAL Academy file across Google Drive.</p>
+      <p>The <strong>KAL File Registry</strong> is a Google Sheets-based file management system that tracks every KAL file across Google Drive.</p>
       <p>It enforces a strict naming convention, validates each file against Drive, assigns visual audit status, and automates file creation, archiving, linking, and reporting — all from a single spreadsheet menu.</p>
       <div class="info-box">
         <strong>Sheets used:</strong> <code>Registry</code> (main data) · <code>CODES &amp; Descriptions</code> (validation) · <code>Settings</code> (configuration)
@@ -525,12 +526,13 @@
         </li>
         <li>
           <span class="qs-num">2</span>
-          <span><strong>Verify Codes</strong> — access the <em>Show Codes</em> menu to view valid DRIVE, ENTITY, and DOCTYPE tags.</span>
+          <span><strong>Verify Codes</strong> — open the <strong>Codes</strong> tab in this sidebar to view valid DRIVE, ENTITY, and DOCTYPE tags.</span>
         </li>
         <li>
           <span class="qs-num">3</span>
-          <span><strong>Format the Name</strong> — fill in <strong>Column C (File Name)</strong> using the pattern:<br>
-            <code style="display:inline-block;margin-top:4px;word-break:break-all;">[DRIVE CODE]-[ENTITY CODE]_[DOCTYPE CODE]_[Human-ReadableCamelCaseDescription]</code>
+          <span><strong>Format the Name</strong> — fill in <strong>Column C (Base File Name)</strong> using the pattern:<br>
+            <code style="display:inline-block;margin-top:4px;word-break:break-all;">[DRIVE CODE]-[ENTITY CODE]_[DOCTYPE CODE]_[Human-ReadableCamelCaseDescription]</code><br>
+            <span style="font-size:0.85em;color:var(--muted,#666);margin-top:3px;display:inline-block;">The real file name adds <code>_[YYYYMMDD]_v[N]</code> — the registry stores only the base.</span>
           </span>
         </li>
         <li>
@@ -612,6 +614,14 @@
           <span class="setting-cell">C2</span>
           <span>Archive folder URL (used by <em>Archive Older Versions</em> and <em>Promote to Final</em>)</span>
         </div>
+        <div class="setting-row">
+          <span class="setting-cell">E2</span>
+          <span>Root Folder URL — scanned by <em>Rebuild Registry from Drive</em> and <em>Refresh Non-KAL Section</em> to find files that do not follow the KAL naming convention</span>
+        </div>
+        <div class="setting-row">
+          <span class="setting-cell">F2</span>
+          <span>Stale threshold in days (default: 180). Files not modified within this period are flagged by <em>Flag Stale Files</em> with a yellow-orange background and <code>⚠️ Stale</code> in col I.</span>
+        </div>
       </div>
       <div class="warn-box" style="margin-top:8px;">
         <strong>Required:</strong> Paste the full Google Drive folder URL into each cell. Functions will error if the cell is empty.
@@ -689,7 +699,7 @@
       <span class="icon">▼</span>
     </div>
     <div class="section-body">
-      <p>The <strong>Registry</strong> sheet has 13 columns (A–M). All columns are script-managed <span class="badge badge-blue">AUTO</span> except <strong>col C</strong> (File Name) and <strong>col K</strong> (Preferred KAL Template) which require manual input.</p>
+      <p>The <strong>Registry</strong> sheet has 13 columns (A–M). All columns are script-managed <span class="badge badge-blue">AUTO</span> except <strong>col C</strong> (Base File Name) and <strong>col K</strong> (Preferred KAL Template) which require manual input.</p>
 
       <table class="col-table" style="margin-top:8px;">
         <tr><th>Col</th><th>Field</th><th>Notes</th></tr>
@@ -701,12 +711,12 @@
         <tr>
           <td class="col-letter">B</td>
           <td><span class="badge badge-blue">AUTO</span><br>Description</td>
-          <td>Human-readable name for the file. Used in Abstract formula.</td>
+          <td>Human-readable name for the file. Used in Abstract formula. Background turns <span style="background:#ffe599;padding:0 4px;border-radius:2px">yellow-orange</span> when flagged as stale.</td>
         </tr>
         <tr>
           <td class="col-letter">C</td>
-          <td><span class="badge badge-red">MANUAL</span><br>File Name</td>
-          <td>Full KAL-format name without extension. Validated on audit.</td>
+          <td><span class="badge badge-red">MANUAL</span><br>Base File Name</td>
+          <td>KAL base name without date, version, or extension: <code>[DRIVE]-[ENTITY]_[DOCTYPE]_[Description]</code>. The real file name appends <code>_[YYYYMMDD]_v[N]</code>. Validated on audit.</td>
         </tr>
         <tr>
           <td class="col-letter">D</td>
@@ -736,7 +746,7 @@
         <tr>
           <td class="col-letter">I</td>
           <td><span class="badge badge-blue">AUTO</span><br>KAL Name Check</td>
-          <td>Audit result. Blank = pass. Error text = fail (row turns red).</td>
+          <td>Audit result. <code>OK</code> = passes all checks. Error text = fail (row turns red). <code>⚠️ Stale</code> appended when file not modified within the stale threshold.</td>
         </tr>
         <tr>
           <td class="col-letter">J</td>
@@ -755,8 +765,13 @@
         </tr>
         <tr>
           <td class="col-letter">M</td>
-          <td><span class="badge badge-blue">AUTO</span><br>Owner Email</td>
-          <td>Email address for <em>Notify Owner</em> function.</td>
+          <td><span class="badge badge-blue">OPTIONAL</span><br>Owner Email</td>
+          <td>Email address for <em>Notify Owner</em>. Also used for automatic vFINAL promotion email.</td>
+        </tr>
+        <tr>
+          <td class="col-letter">N</td>
+          <td><span class="badge badge-grey">HIDDEN</span><br>Changelog</td>
+          <td>Version notes stored in the hidden <strong>Changelog</strong> sheet, keyed by Drive file ID. Edit inline in the <em>Show All Versions</em> dialog — click the Notes cell and type, changes save on blur.</td>
         </tr>
       </table>
     </div>
@@ -788,32 +803,61 @@
 
   <div class="section">
     <div class="section-head" onclick="toggleSection(this)">
-      <h2>📁 File Operations</h2>
+      <h2>⚡ Top-Level Actions</h2>
       <span class="icon">▼</span>
     </div>
     <div class="section-body">
       <div class="menu-item blue">
-        <span class="fn-name">Create Selected File</span>
+        <span class="fn-name">🔄 Audit All Rows</span>
+        <span class="fn-desc">Validates every row: checks naming convention, Drive/entity/doc-type codes, searches Drive, updates cols E/F/G/I, and applies status colors. Runs as a single batch for performance.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">🎯 Audit Selected Row</span>
+        <span class="fn-desc">Same as above but only for the cursor row — much faster for a quick single-row check.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">🔍 Search Missing KAL Files</span>
+        <span class="fn-desc">Scans Drive for files starting with a registered Drive prefix (OP-, LP-, PC-, etc.) that are not yet in the Registry. Found files are inserted below their section in sorted order.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">🔔 Notify Owner</span>
+        <span class="fn-desc">Sends an email to the address in col M for the selected row, with the row's current audit status and a link to the file. Requires Gmail send permission. An email is also sent automatically when a file is promoted to vFINAL (via <em>Promote to vFINAL &amp; Move</em> or the Versions dialog).</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>📁 File Operations</h2>
+      <span class="icon">▼</span>
+    </div>
+    <div class="section-body">
+      <div class="menu-item green">
+        <span class="fn-name">📋 Show All Versions</span>
+        <span class="fn-desc">Opens a modal listing every Drive version of the selected file. Columns: <strong>File Name</strong> (clickable link) · <strong>Date</strong> (YYYYMMDD) · <strong>Version</strong> (v1 / vFINAL) · <strong>Drive Location</strong> · <strong>Notes</strong> (editable changelog — click to type, saves on blur). The <em>Latest Version</em> row shows a 🏁 <strong>Promote</strong> button to promote directly to vFINAL. ⚠️ icons appear next to rows adjacent to a version gap (e.g. v1, v3 with v2 missing).</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">🏗️ Create Selected File</span>
         <span class="fn-desc">Creates a new Google file in Drive for the selected row using the name in col C. Optionally copies from the template in col K or Settings!B2. Inserts the Drive link into col G.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Open Current Folder</span>
+        <span class="fn-name">📂 Open Current Folder</span>
         <span class="fn-desc">Opens the Drive folder listed in col F for the selected row in a new browser tab.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Move to Destination Drive</span>
+        <span class="fn-name">🚚 Move to Destination Drive</span>
         <span class="fn-desc">Moves the selected file to the URL in col J (or Settings!A2 if col J is empty). Updates col F and col G automatically.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Promote to Final &amp; Move</span>
-        <span class="fn-desc">Renames the file to <code>vFINAL</code>, moves it to Destination Drive, and archives the previous versioned copy to Settings!C2. Triggers a full row re-audit.</span>
+        <span class="fn-name">🏁 Promote to vFINAL &amp; Move</span>
+        <span class="fn-desc">Renames the file to <code>vFINAL</code>, moves it to Destination Drive, and archives the previous versioned copy to Settings!C2. Triggers a full row re-audit. If col M has a valid email address, the owner is automatically notified by email.</span>
       </div>
       <div class="menu-item red">
-        <span class="fn-name">Remove Selected File</span>
+        <span class="fn-name">🗑️ Remove Selected Version</span>
         <span class="fn-desc">Permanently deletes the Drive file linked in col G. Prompts for confirmation before deletion.</span>
       </div>
       <div class="menu-item red">
-        <span class="fn-name">Remove All Versions</span>
+        <span class="fn-name">☢️ Remove All Versions</span>
         <span class="fn-desc">Deletes all Drive files whose name matches the base name in col C (all version suffixes). Use with caution.</span>
       </div>
     </div>
@@ -826,24 +870,32 @@
     </div>
     <div class="section-body">
       <div class="menu-item blue">
-        <span class="fn-name">Rebuild Registry from Drive</span>
-        <span class="fn-desc">Clears all existing rows and repopulates the registry by scanning Google Drive for every KAL-convention file. Groups files by drive-code prefix (OP, LP, PC, then others). Runs a full audit automatically after rebuilding.</span>
+        <span class="fn-name">🔁 Rebuild Registry from Drive</span>
+        <span class="fn-desc">Clears all existing rows and repopulates the registry by scanning Google Drive for every KAL-convention file. Groups files by drive-code prefix (OP, LP, PC, then others). Also appends non-KAL files found in the Root Folder (Settings!E2) at the bottom. Runs a full audit automatically after rebuilding.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Keep Only Latest Version</span>
+        <span class="fn-name">🗂️ Refresh Non-KAL Section</span>
+        <span class="fn-desc">Updates <em>only</em> the non-KAL file block at the bottom of the registry — without clearing or touching any KAL rows. Re-scans the Root Folder (Settings!E2), replaces the old non-KAL rows with fresh results, and renumbers col A. Use this instead of a full rebuild when only non-KAL files have changed.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">🧹 Keep Only Latest Version</span>
         <span class="fn-desc">Scans Drive for all versions of each registered file. Keeps only the highest version; trashes older copies and updates links.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Archive Older Versions</span>
+        <span class="fn-name">📦 Archive Older Versions</span>
         <span class="fn-desc">Moves all non-latest versions to the archive folder (Settings!C2) instead of deleting them. Useful for audit trails.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Repair Broken Links</span>
+        <span class="fn-name">🛠️ Repair Broken Links</span>
         <span class="fn-desc">Re-searches Drive for every row where col G shows <code>Not Found</code> or a stale URL, and repairs any that can be matched by exact file name.</span>
       </div>
       <div class="menu-item blue">
-        <span class="fn-name">Clear All Diagnostics</span>
+        <span class="fn-name">🧼 Clear All Diagnostics</span>
         <span class="fn-desc">Wipes col I (KAL Name Check) and removes all row background colors, resetting the sheet to an unaudited state.</span>
+      </div>
+      <div class="menu-item blue">
+        <span class="fn-name">📦 Bulk Archive Selected Rows</span>
+        <span class="fn-desc">Select one or more rows in the Registry, then run this to move each linked Drive file into the archive folder (Settings!C2). Shows progress toasts and a final count. Useful for batch end-of-cycle archiving.</span>
       </div>
     </div>
   </div>
@@ -855,69 +907,44 @@
     </div>
     <div class="section-body">
       <div class="menu-item green">
-        <span class="fn-name">Generate Health Report</span>
+        <span class="fn-name">📊 Generate Health Report</span>
         <span class="fn-desc">Opens a modal summarizing the registry: total rows, red/yellow/green counts, missing files, finalized %, and a list of all error rows.</span>
       </div>
       <div class="menu-item green">
-        <span class="fn-name">Export Registry to PDF</span>
+        <span class="fn-name">📊 Summary Dashboard</span>
+        <span class="fn-desc">Creates (or replaces) a <strong>Dashboard</strong> sheet with formatted summary tables: totals by Drive Code, Entity, Doc Type, and KAL status (OK / error / Non-KAL / not found), plus vFINAL count vs. in-progress count.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">📭 Missing Files Report</span>
+        <span class="fn-desc">Shows a modal listing every row where col G = <code>File not found</code> (literal text, not a hyperlink). Displays row number, file name, and KAL check status. Use <em>Create Selected File</em> or re-audit to resolve.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">🔁 Detect Duplicates</span>
+        <span class="fn-desc">Scans col C for rows that share the same base name (after stripping date and version suffixes). Highlights all duplicate rows with an orange background (<code>#f9cb9c</code>) and shows a toast with the count of duplicate base names found.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">⏰ Flag Stale Files</span>
+        <span class="fn-desc">For every row with a Drive file link, checks the file's last-modified date. If not modified within the stale threshold (Settings!F2, default 180 days), the row gets a yellow-orange background on col B and <code>⚠️ Stale</code> appended to col I.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">🔍 Filter Registry</span>
+        <span class="fn-desc">Opens a sidebar with dropdowns for Drive Code, Entity, Doc Type, and KAL Status. <strong>Apply Filter</strong> hides rows that don't match. <strong>Clear Filter</strong> restores all rows. Blank separator rows are never hidden.</span>
+      </div>
+      <div class="menu-item green">
+        <span class="fn-name">📤 Export Registry to PDF</span>
         <span class="fn-desc">Downloads the Registry sheet as a formatted PDF, saved to your Drive root with the current date in the file name.</span>
       </div>
       <div class="menu-item green">
-        <span class="fn-name">Toggle Compact View</span>
+        <span class="fn-name">🌓 Toggle Compact View</span>
         <span class="fn-desc">Shows/hides columns D, H, J, and L to reduce horizontal scrolling during data entry.</span>
       </div>
       <div class="menu-item green">
-        <span class="fn-name">Toggle Done Rows</span>
+        <span class="fn-name">👁️ Toggle Done Rows</span>
         <span class="fn-desc">Shows/hides all green (vFINAL) rows so you can focus on files still in progress.</span>
       </div>
     </div>
   </div>
 
-  <div class="section">
-    <div class="section-head" onclick="toggleSection(this)">
-      <h2>⚡ Top-Level Actions</h2>
-      <span class="icon">▼</span>
-    </div>
-    <div class="section-body">
-      <div class="menu-item blue">
-        <span class="fn-name">Audit All Rows</span>
-        <span class="fn-desc">Validates every row: checks naming convention, Drive/entity/doc-type codes, searches Drive, updates cols E/F/G/I, and applies status colors. Runs as a single batch for performance.</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Audit Selected Row</span>
-        <span class="fn-desc">Same as above but only for the cursor row — much faster for a quick single-row check.</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Search Missing KAL Files</span>
-        <span class="fn-desc">Scans Drive for files starting with a registered Drive prefix (OP-, LP-, PC-, etc.) that are not yet in the Registry. Found files are inserted below their section in sorted order.</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Notify Owner</span>
-        <span class="fn-desc">Sends an email to the address in col M for the selected row, with the row's current audit status and a link to the file. Requires Gmail send permission.</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="section-head" onclick="toggleSection(this)">
-      <h2>🏷️ Show Codes</h2>
-      <span class="icon">▼</span>
-    </div>
-    <div class="section-body">
-      <div class="menu-item blue">
-        <span class="fn-name">Show Drive Codes</span>
-        <span class="fn-desc">Lists all valid Drive prefix codes with descriptions, read live from the CODES &amp; Descriptions tab.</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Show Entity Codes</span>
-        <span class="fn-desc">Lists all valid Entity codes with descriptions (e.g. KAL = Kal Academy).</span>
-      </div>
-      <div class="menu-item blue">
-        <span class="fn-name">Show Doc Type Codes</span>
-        <span class="fn-desc">Lists all valid Document Type codes (e.g. POL = Policy, RPT = Report, FRM = Form).</span>
-      </div>
-    </div>
-  </div>
 
 </div><!-- /tab-menus -->
 
@@ -1113,7 +1140,7 @@
 </div><!-- /tab-ai -->
 
 <div class="footer">
-  KAL Academy · Smart File Registry · v2.0 · © 2026
+  KAL Academy · File Registry · v2.0 · © 2026
 </div>
 
 <!-- ══════════════════════════════════════
