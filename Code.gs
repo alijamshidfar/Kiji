@@ -382,37 +382,61 @@ function searchMissingKALFiles() {
       });
   }
 
-  // Drive search per code
+  // BFS folder scan per drive code — reliable for Shared Drives where
+  // DriveApp.searchFiles silently skips files.
   const missing = {};
   driveCodes.forEach(c => { missing[c] = []; });
-  let searchErrors = 0;
+
+  let levelsData;
+  try { levelsData = getLevelsData(); }
+  catch (e) { toast('Could not load Codes sheet: ' + e.message, '⚠️ Error', 6); return; }
+
+  const MAX_DEPTH = 5;
 
   for (const code of driveCodes) {
-    const prefix    = code + '-';
-    const seenBases = new Set();
-    try {
-      const iter = DriveApp.searchFiles("title contains '" + prefix + "'");
-      while (iter.hasNext()) {
-        const fileName = iter.next().getName();
-        if (!fileName.toUpperCase().startsWith(prefix)) continue;
-        if (!isKALFileName(fileName)) continue;
-        const base = extractKALBaseName(fileName);
-        if (!base) continue;
-        const key = base.toUpperCase();
-        if (existingNames.has(key) || seenBases.has(key)) continue;
-        seenBases.add(key);
-        missing[code].push(base);
+    const prefix     = code + '-';
+    const seenBases  = new Set();
+    const driveUrl   = levelsData.driveUrlLookup[code];
+    const folderId   = driveUrl ? getIdFromUrl(driveUrl) : null;
+    if (!folderId) {
+      console.warn('searchMissingKALFiles: no folder URL for drive code ' + code);
+      continue;
+    }
+
+    const queue = [{ id: folderId, depth: 0 }];
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift();
+      let folder;
+      try { folder = DriveApp.getFolderById(id); } catch (_) { continue; }
+
+      try {
+        const files = folder.getFiles();
+        while (files.hasNext()) {
+          const fileName = files.next().getName();
+          if (!fileName.toUpperCase().startsWith(prefix)) continue;
+          if (!isKALFileName(fileName)) continue;
+          const base = extractKALBaseName(fileName);
+          if (!base) continue;
+          const key = base.toUpperCase();
+          if (existingNames.has(key) || seenBases.has(key)) continue;
+          seenBases.add(key);
+          missing[code].push(base);
+        }
+      } catch (_) {}
+
+      if (depth < MAX_DEPTH) {
+        try {
+          const subs = folder.getFolders();
+          while (subs.hasNext()) queue.push({ id: subs.next().getId(), depth: depth + 1 });
+        } catch (_) {}
       }
-    } catch (e) {
-      console.error('searchMissingKALFiles [' + code + ']: ' + e.message);
-      searchErrors++;
     }
     missing[code].sort();
   }
 
   const totalMissing = driveCodes.reduce((s, c) => s + missing[c].length, 0);
   if (totalMissing === 0) {
-    toast('Registry is up to date!' + (searchErrors ? ' (' + searchErrors + ' search errors — check Logs)' : ''), '✅ All Good', 5);
+    toast('Registry is up to date!', '✅ All Good', 5);
     return;
   }
 
@@ -432,8 +456,8 @@ function searchMissingKALFiles() {
   }
 
   // Immediately audit new rows
-  let levelsData, templateList;
-  try { levelsData = getLevelsData(); templateList = getTemplateList(); }
+  let templateList;
+  try { templateList = getTemplateList(); }
   catch (e) { console.error('searchMissingKALFiles audit setup: ' + e.message); }
 
   if (levelsData) {
@@ -451,9 +475,8 @@ function searchMissingKALFiles() {
   // Renumber sequentially after insertions
   renumberAllRows_(sheet);
 
-  let summary = 'Added ' + totalMissing + ' file(s): ';
-  summary += driveCodes.filter(c => missing[c].length).map(c => c + '- ×' + missing[c].length).join(', ');
-  if (searchErrors) summary += ' | ' + searchErrors + ' search error(s)';
+  const summary = 'Added ' + totalMissing + ' file(s): ' +
+    driveCodes.filter(c => missing[c].length).map(c => c + '- ×' + missing[c].length).join(', ');
   toast(summary, '🔍 Missing Files Found', 6);
 }
 
