@@ -382,8 +382,9 @@ function searchMissingKALFiles() {
       });
   }
 
-  // BFS folder scan per drive code — reliable for Shared Drives where
-  // DriveApp.searchFiles silently skips files.
+  // BFS from Root Folder (Settings!E2) — same proven approach as rebuildCollectNonKalFiles_.
+  // driveUrlLookup entries point to Shared Drive roots which getFolderById cannot traverse;
+  // the Root Folder is a regular folder that works reliably.
   const missing = {};
   driveCodes.forEach(c => { missing[c] = []; });
 
@@ -391,48 +392,49 @@ function searchMissingKALFiles() {
   try { levelsData = getLevelsData(); }
   catch (e) { toast('Could not load Codes sheet: ' + e.message, '⚠️ Error', 6); return; }
 
-  const MAX_DEPTH = 5;
-
-  for (const code of driveCodes) {
-    const prefix     = code + '-';
-    const seenBases  = new Set();
-    const driveUrl   = levelsData.driveUrlLookup[code];
-    const folderId   = driveUrl ? getIdFromUrl(driveUrl) : null;
-    if (!folderId) {
-      console.warn('searchMissingKALFiles: no folder URL for drive code ' + code);
-      continue;
-    }
-
-    const queue = [{ id: folderId, depth: 0 }];
-    while (queue.length > 0) {
-      const { id, depth } = queue.shift();
-      let folder;
-      try { folder = DriveApp.getFolderById(id); } catch (_) { continue; }
-
-      try {
-        const files = folder.getFiles();
-        while (files.hasNext()) {
-          const fileName = files.next().getName();
-          if (!fileName.toUpperCase().startsWith(prefix)) continue;
-          if (!isKALFileName(fileName)) continue;
-          const base = extractKALBaseName(fileName);
-          if (!base) continue;
-          const key = base.toUpperCase();
-          if (existingNames.has(key) || seenBases.has(key)) continue;
-          seenBases.add(key);
-          missing[code].push(base);
-        }
-      } catch (_) {}
-
-      if (depth < MAX_DEPTH) {
-        try {
-          const subs = folder.getFolders();
-          while (subs.hasNext()) queue.push({ id: subs.next().getId(), depth: depth + 1 });
-        } catch (_) {}
-      }
-    }
-    missing[code].sort();
+  const rootUrl = getUrlFromCell(SHEET.SETTINGS, 'E2');
+  const rootId  = rootUrl ? getIdFromUrl(rootUrl) : null;
+  if (!rootId) {
+    toast('Settings!E2 (Root Folder) is empty — cannot scan for new files.', '⚠️ Warning', 5);
+    return;
   }
+
+  const MAX_DEPTH  = 5;
+  const seenBases  = new Set();
+  const KAL_RE     = /^[A-Z]{2,4}-[A-Z]/;
+
+  const queue = [{ id: rootId, depth: 0 }];
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift();
+    let folder;
+    try { folder = DriveApp.getFolderById(id); } catch (_) { continue; }
+
+    try {
+      const files = folder.getFiles();
+      while (files.hasNext()) {
+        const fileName = files.next().getName();
+        if (!KAL_RE.test(fileName) || !fileName.includes('_')) continue;
+        if (!isKALFileName(fileName)) continue;
+        const base = extractKALBaseName(fileName);
+        if (!base) continue;
+        const key = base.toUpperCase();
+        if (existingNames.has(key) || seenBases.has(key)) continue;
+        seenBases.add(key);
+        // Assign to the correct drive code bucket
+        const codeMatch = base.match(/^([A-Za-z]{2,4})-/);
+        const code = codeMatch ? codeMatch[1].toUpperCase() : null;
+        if (code && missing[code]) missing[code].push(base);
+      }
+    } catch (_) {}
+
+    if (depth < MAX_DEPTH) {
+      try {
+        const subs = folder.getFolders();
+        while (subs.hasNext()) queue.push({ id: subs.next().getId(), depth: depth + 1 });
+      } catch (_) {}
+    }
+  }
+  driveCodes.forEach(c => missing[c].sort());
 
   const totalMissing = driveCodes.reduce((s, c) => s + missing[c].length, 0);
   if (totalMissing === 0) {
