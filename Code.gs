@@ -1829,10 +1829,13 @@ function rebuildFormatHeader_(sheet) {
   } catch (_) {}
 
   // Insert Kiji logo into A1.
-  // Priority: KAL_LOGO_PNG_BASE64 constant → Settings tab D2 (Drive link or direct URL)
-  const blob = (KAL_LOGO_PNG_BASE64
+  // Priority: KAL_LOGO_PNG_BASE64 constant → Settings tab D2 (Drive link or direct URL).
+  // If the embedded constant fails (e.g. image too large for Sheets), the Settings!D2
+  // thumbnail is tried automatically as a fallback.
+  const primaryBlob = KAL_LOGO_PNG_BASE64
       ? Utilities.newBlob(Utilities.base64Decode(KAL_LOGO_PNG_BASE64), 'image/png', 'kiji-logo.png')
-      : null) || rebuildGetLogoBlobFromSettings_();
+      : null;
+  const blob = primaryBlob || rebuildGetLogoBlobFromSettings_();
   if (blob) {
     const ct = blob.getContentType() || '';
     if (ct.indexOf('svg') !== -1) {
@@ -1842,13 +1845,35 @@ function rebuildFormatHeader_(sheet) {
         '⚠️ Logo', 10);
       console.warn('Logo skipped: SVG not supported by insertImage (contentType=' + ct + ')');
     } else {
+      let inserted = false;
       try {
         sheet.insertImage(blob, 1, 1); // anchor to A1, no pixel offset
+        inserted = true;
         console.log('Logo inserted successfully (contentType=' + ct + ')');
       } catch (e) {
-        SpreadsheetApp.getActiveSpreadsheet().toast(
-          'Logo insert failed: ' + e.message, '⚠️ Logo', 8);
         console.warn('Logo insertImage failed: ' + e.message);
+      }
+      // If the embedded constant failed (e.g. image exceeds Sheets storage limits),
+      // retry using the Settings!D2 thumbnail which is always fetched at a safe size.
+      if (!inserted && primaryBlob) {
+        const fallback = rebuildGetLogoBlobFromSettings_();
+        if (fallback) {
+          try {
+            sheet.insertImage(fallback, 1, 1);
+            console.log('Logo inserted via Settings!D2 fallback.');
+          } catch (e2) {
+            SpreadsheetApp.getActiveSpreadsheet().toast(
+              'Logo insert failed: ' + e2.message, '⚠️ Logo', 8);
+            console.warn('Logo fallback insertImage failed: ' + e2.message);
+          }
+        } else {
+          SpreadsheetApp.getActiveSpreadsheet().toast(
+            'Logo insert failed: the embedded PNG may be too large for Google Sheets. ' +
+            'Add a PNG Drive link in Settings!D2 as a fallback.', '⚠️ Logo', 10);
+        }
+      } else if (!inserted) {
+        SpreadsheetApp.getActiveSpreadsheet().toast(
+          'Logo insert failed. Check the link in Settings!D2.', '⚠️ Logo', 8);
       }
     }
   } else {
