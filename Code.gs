@@ -389,7 +389,6 @@ function searchMissingKALFiles() {
   try { levelsData = getLevelsData(); }
   catch (e) { toast('Could not load Codes sheet: ' + e.message, '⚠️ Error', 6); return; }
 
-  const MAX_DEPTH = 5;
   const seenBases = new Set();
   const KAL_RE    = /^[A-Z]{2,4}-[A-Z]/;
 
@@ -406,42 +405,63 @@ function searchMissingKALFiles() {
     if (code && missing[code]) missing[code].push(base);
   }
 
-  function bfsScanFolder_(startId) {
-    const queue = [{ id: startId, depth: 0 }];
-    while (queue.length > 0) {
-      const { id, depth } = queue.shift();
-      let folder;
-      try { folder = DriveApp.getFolderById(id); } catch (_) { continue; }
-      try {
-        const files = folder.getFiles();
-        while (files.hasNext()) collectKalFile_(files.next().getName());
-      } catch (_) {}
-      if (depth < MAX_DEPTH) {
-        try {
-          const subs = folder.getFolders();
-          while (subs.hasNext()) queue.push({ id: subs.next().getId(), depth: depth + 1 });
-        } catch (_) {}
-      }
-    }
+  // Search the entire Google Drive (My Drive + all Shared Drives) using the
+  // Drive API Advanced Service which supports includeItemsFromAllDrives.
+  // Falls back to DriveApp.searchFiles if the Advanced Service is not enabled.
+  let usedAdvancedApi = false;
+  try {
+    // Requires: Resources → Advanced Google Services → Drive API (v3) enabled.
+    let pageToken = null;
+    do {
+      const params = {
+        q: "trashed = false",
+        fields: 'nextPageToken, files(name)',
+        includeItemsFromAllDrives: true,
+        supportsAllDrives: true,
+        corpora: 'allDrives',
+        pageSize: 1000
+      };
+      if (pageToken) params.pageToken = pageToken;
+      const resp = Drive.Files.list(params);
+      (resp.files || []).forEach(f => collectKalFile_(f.name));
+      pageToken = resp.nextPageToken;
+    } while (pageToken);
+    usedAdvancedApi = true;
+  } catch (_) {
+    // Drive Advanced Service not enabled — fall back to DriveApp per drive code.
   }
 
-  // Pass 1 — BFS from Root Folder (Settings!E2): works for files inside the
-  //           defined folder structure (same approach as rebuildCollectNonKalFiles_).
-  const rootId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'E2'));
-  if (rootId) bfsScanFolder_(rootId);
-
-  // Pass 2 — BFS from Archive folder (Settings!C2): catches older/promoted files.
-  const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
-  if (archiveId && archiveId !== rootId) bfsScanFolder_(archiveId);
-
-  // Pass 3 — searchFiles per drive code: catches files stored OUTSIDE the above
-  //           folder trees (e.g. directly in the Shared Drive root or My Drive).
-  //           Errors per code are swallowed — at least one pass above will work.
-  for (const code of driveCodes) {
-    try {
-      const iter = DriveApp.searchFiles("title contains '" + code + "-' and trashed = false");
-      while (iter.hasNext()) collectKalFile_(iter.next().getName());
-    } catch (_) {}
+  if (!usedAdvancedApi) {
+    // Fallback: BFS from Root Folder + Archive + searchFiles per code.
+    const MAX_DEPTH = 5;
+    function bfsScanFolder_(startId) {
+      const queue = [{ id: startId, depth: 0 }];
+      while (queue.length > 0) {
+        const { id, depth } = queue.shift();
+        let folder;
+        try { folder = DriveApp.getFolderById(id); } catch (_) { continue; }
+        try {
+          const files = folder.getFiles();
+          while (files.hasNext()) collectKalFile_(files.next().getName());
+        } catch (_) {}
+        if (depth < MAX_DEPTH) {
+          try {
+            const subs = folder.getFolders();
+            while (subs.hasNext()) queue.push({ id: subs.next().getId(), depth: depth + 1 });
+          } catch (_) {}
+        }
+      }
+    }
+    const rootId    = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'E2'));
+    const archiveId = getIdFromUrl(getUrlFromCell(SHEET.SETTINGS, 'C2'));
+    if (rootId)                          bfsScanFolder_(rootId);
+    if (archiveId && archiveId !== rootId) bfsScanFolder_(archiveId);
+    for (const code of driveCodes) {
+      try {
+        const iter = DriveApp.searchFiles("title contains '" + code + "-' and trashed = false");
+        while (iter.hasNext()) collectKalFile_(iter.next().getName());
+      } catch (_) {}
+    }
   }
 
   driveCodes.forEach(c => missing[c].sort());
