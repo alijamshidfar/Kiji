@@ -66,13 +66,32 @@ function onOpen() {
     .addSeparator()
 
     .addItem('🔔 Notify Owner',        'notifyOwner')
+    .addItem('⚙️ Enable Auto-Scan on Open', 'setupAutoScanTrigger')
     .addItem('📖 User Guide', 'showUserGuide')
     .addToUi();
 
   try { updateTemplateDropdown(); } catch (_) { /* non-fatal on open */ }
+}
 
-  // Auto-scan for newly created Drive files and add them to the registry.
-  try { searchMissingKALFiles(); } catch (_) { /* non-fatal on open */ }
+/**
+ * Creates an installable onOpen trigger for searchMissingKALFiles.
+ * Must be run once by the user (via menu) — installable triggers have full
+ * Drive authorization that simple onOpen triggers do not.
+ */
+function setupAutoScanTrigger() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Remove any existing triggers for this function to avoid duplicates.
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'searchMissingKALFiles')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+
+  ScriptApp.newTrigger('searchMissingKALFiles')
+    .forSpreadsheet(ss)
+    .onOpen()
+    .create();
+
+  toast('Auto-scan on open is now active. The registry will update every time this spreadsheet is opened.', '✅ Trigger Set', 6);
 }
 
 // ── Sheet font default ────────────────────────────────────────────────────────
