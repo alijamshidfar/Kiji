@@ -70,6 +70,9 @@ function onOpen() {
     .addToUi();
 
   try { updateTemplateDropdown(); } catch (_) { /* non-fatal on open */ }
+
+  // Auto-scan for newly created Drive files and add them to the registry.
+  try { searchMissingKALFiles(); } catch (_) { /* non-fatal on open */ }
 }
 
 // ── Sheet font default ────────────────────────────────────────────────────────
@@ -348,7 +351,9 @@ function processAuditForRow(sheet, r, driveUrlLookup, validEntities, validDocs, 
  */
 function searchMissingKALFiles() {
   const ss    = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getActiveSheet();
+  // Always operate on the Registry sheet — the active sheet may be different
+  // when this is called automatically from onOpen().
+  const sheet = ss.getSheetByName(SHEET.REGISTRY) || ss.getActiveSheet();
 
   let driveCodes;
   try { driveCodes = getDriveCodesOrdered(); }
